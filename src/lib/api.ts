@@ -6,6 +6,10 @@ import type {
   GatewayConfig,
   ConfigHistoryEntry,
   CronJob,
+  Memory,
+  MemoryDetail,
+  MemoryStats,
+  MemoryTier,
 } from "./types";
 
 const BASE = process.env.NEXT_PUBLIC_KING_URL || "";
@@ -83,6 +87,86 @@ export const api = {
 
   configSync: () =>
     fetchJSON<{ success: boolean }>("/admin/config-sync", { method: "POST" }),
+
+  memories: (params?: {
+    scope?: string;
+    category?: string;
+    agent_id?: string;
+    run_id?: string;
+    tag?: string;
+    limit?: number;
+  }) => {
+    const qs = new URLSearchParams();
+    if (params?.scope) qs.set("scope", params.scope);
+    if (params?.category) qs.set("category", params.category);
+    if (params?.agent_id) qs.set("agent_id", params.agent_id);
+    if (params?.run_id) qs.set("run_id", params.run_id);
+    if (params?.tag) qs.set("tag", params.tag);
+    if (params?.limit) qs.set("limit", String(params.limit));
+    const query = qs.toString();
+    return fetchJSON<{ memories: Memory[]; count: number }>(
+      `/memories${query ? `?${query}` : ""}`
+    );
+  },
+
+  memoryDetail: (id: string) =>
+    fetchJSON<MemoryDetail>(`/memories/${id}`),
+
+  createMemory: (body: {
+    scope: string;
+    category: string;
+    key: string;
+    metadata?: Record<string, unknown>;
+    tags?: string[];
+    agent_id?: string;
+    run_id?: string;
+    skill_id?: string;
+    relevance_score?: number;
+    tiers?: Array<{ tier: string; content: string }>;
+  }) =>
+    fetchJSON<{ success: boolean; memory: Memory }>("/memories", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+
+  updateMemory: (
+    id: string,
+    body: {
+      metadata?: Record<string, unknown>;
+      tags?: string[];
+      relevance_score?: number;
+      tiers?: Array<{ tier: string; content: string }>;
+    }
+  ) =>
+    fetchJSON<{ success: boolean; memory: Memory }>(`/memories/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(body),
+    }),
+
+  deleteMemory: (id: string) =>
+    fetchJSON<{ success: boolean }>(`/memories/${id}`, { method: "DELETE" }),
+
+  searchMemories: (body: {
+    query: string;
+    scope?: string;
+    category?: string;
+    agent_id?: string;
+    tier?: string;
+    limit?: number;
+  }) =>
+    fetchJSON<{ memories: Memory[]; count: number }>("/memories/search", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+
+  memoryStats: () =>
+    fetchJSON<MemoryStats>("/memories/stats"),
+
+  memoryTiers: (memoryId: string) =>
+    fetchJSON<{ tiers: MemoryTier[]; count: number }>(`/memories/${memoryId}/tiers`),
+
+  taskMemories: (taskId: string) =>
+    fetchJSON<{ memories: Memory[]; count: number }>(`/task/${taskId}/memories`),
 
   debugPrompt: (params: {
     agent_role: string;

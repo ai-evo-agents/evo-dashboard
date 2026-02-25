@@ -96,6 +96,38 @@ export const PIPELINE_STAGES = [
 
 export type PipelineStage = (typeof PIPELINE_STAGES)[number];
 
+export interface MemoryTier {
+  id: string;
+  memory_id: string;
+  tier: string;
+  content: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Memory {
+  id: string;
+  scope: string;
+  category: string;
+  key: string;
+  metadata: Record<string, unknown>;
+  tags: string[];
+  agent_id: string;
+  run_id: string;
+  skill_id: string;
+  relevance_score: number;
+  access_count: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface MemoryDetail extends Memory {
+  tiers: MemoryTier[];
+  task_ids?: string[];
+}
+
+export type MemoryStats = Record<string, number>;
+
 export interface DebugResponse {
   request_id: string;
   agent_id: string;

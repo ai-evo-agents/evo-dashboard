@@ -8,6 +8,7 @@ const navItems = [
   { href: "/pipeline/", label: "Pipeline", icon: "P" },
   { href: "/tasks/", label: "Tasks", icon: "T" },
   { href: "/gateway/", label: "Gateway", icon: "G" },
+  { href: "/memories/", label: "Memories", icon: "M" },
   { href: "/events/", label: "Events", icon: "E" },
   { href: "/debug/", label: "Debug", icon: "D" },
   { href: "/settings/", label: "Settings", icon: "S" },
