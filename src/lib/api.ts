@@ -180,4 +180,10 @@ export const api = {
       "/debug/prompt",
       { method: "POST", body: JSON.stringify(params) }
     ),
+
+  debugBash: (params: { command: string; request_id?: string }) =>
+    fetchJSON<{ success: boolean; request_id?: string; error?: string }>(
+      "/debug/bash",
+      { method: "POST", body: JSON.stringify(params) }
+    ),
 };
