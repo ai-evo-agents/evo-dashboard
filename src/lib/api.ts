@@ -10,6 +10,7 @@ import type {
   MemoryDetail,
   MemoryStats,
   MemoryTier,
+  ModelEntry,
 } from "./types";
 
 const BASE = process.env.NEXT_PUBLIC_KING_URL || "";
@@ -167,6 +168,15 @@ export const api = {
 
   taskMemories: (taskId: string) =>
     fetchJSON<{ memories: Memory[]; count: number }>(`/task/${taskId}/memories`),
+
+  gatewayModels: () =>
+    fetchJSON<{ object: string; data: ModelEntry[] }>("/gateway/models"),
+
+  setAgentModel: (agentId: string, model: string) =>
+    fetchJSON<{ success: boolean; error?: string }>(
+      `/agents/${agentId}/model`,
+      { method: "PUT", body: JSON.stringify({ model }) }
+    ),
 
   debugPrompt: (params: {
     agent_role: string;

@@ -1,12 +1,16 @@
 "use client";
 import { useEffect, useState } from "react";
 import { useAgents } from "@/hooks/use-agents";
+import { useModels } from "@/hooks/use-models";
 import { StatusBadge } from "@/components/shared/status-badge";
-import { getEffectiveStatus, isAgentLive } from "@/store/agent-store";
-import type { Agent } from "@/lib/types";
+import { getEffectiveStatus, isAgentLive, useAgentStore } from "@/store/agent-store";
+import { api } from "@/lib/api";
+import type { Agent, ModelEntry } from "@/lib/types";
 
 export default function AgentsPage() {
   const { agents, loading } = useAgents();
+  const { models, byProvider, loading: modelsLoading } = useModels();
+  const upsertAgent = useAgentStore((s) => s.upsertAgent);
 
   // Tick every 10 s so "effective status" recomputes even when no socket
   // events arrive (catches agents that silently go offline).
@@ -17,6 +21,16 @@ export default function AgentsPage() {
   }, []);
 
   const onlineCount = agents.filter(isAgentLive).length;
+
+  const handleModelChange = async (agentId: string, model: string) => {
+    // Optimistic update
+    upsertAgent({ agent_id: agentId, preferred_model: model });
+    try {
+      await api.setAgentModel(agentId, model);
+    } catch {
+      // Revert on error — refetch will correct it
+    }
+  };
 
   return (
     <div className="p-6 space-y-6">
@@ -32,7 +46,13 @@ export default function AgentsPage() {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {agents.map((agent) => (
-            <AgentCard key={agent.agent_id} agent={agent} />
+            <AgentCard
+              key={agent.agent_id}
+              agent={agent}
+              byProvider={byProvider}
+              modelsLoading={modelsLoading}
+              onModelChange={handleModelChange}
+            />
           ))}
         </div>
       )}
@@ -42,11 +62,29 @@ export default function AgentsPage() {
 
 // ─── Agent card ──────────────────────────────────────────────────────────────
 
-function AgentCard({ agent }: { agent: Agent }) {
+function AgentCard({
+  agent,
+  byProvider,
+  modelsLoading,
+  onModelChange,
+}: {
+  agent: Agent;
+  byProvider: Record<string, ModelEntry[]>;
+  modelsLoading: boolean;
+  onModelChange: (agentId: string, model: string) => void;
+}) {
   const effectiveStatus = getEffectiveStatus(agent);
   const isOnline = isAgentLive(agent);
   const isError =
     effectiveStatus === "failed" || effectiveStatus === "crashed";
+  const [saving, setSaving] = useState(false);
+
+  const handleChange = async (e: React.ChangeEvent<HTMLSelectElement>) => {
+    setSaving(true);
+    onModelChange(agent.agent_id, e.target.value);
+    // Brief visual feedback
+    setTimeout(() => setSaving(false), 600);
+  };
 
   return (
     <div
@@ -117,6 +155,33 @@ function AgentCard({ agent }: { agent: Agent }) {
           </div>
         </div>
       )}
+
+      {/* Model Selection */}
+      <div className="mt-4 pt-3 border-t border-zinc-800">
+        <div className="flex items-center justify-between mb-1.5">
+          <span className="text-xs text-zinc-500">Preferred Model</span>
+          {saving && (
+            <span className="text-xs text-emerald-400">Saved</span>
+          )}
+        </div>
+        <select
+          value={agent.preferred_model || ""}
+          onChange={handleChange}
+          disabled={modelsLoading}
+          className="w-full bg-zinc-800 border border-zinc-700 rounded px-2.5 py-1.5 text-sm text-zinc-200 focus:outline-none focus:border-zinc-500 transition-colors"
+        >
+          <option value="">Auto (system default)</option>
+          {Object.entries(byProvider).map(([provider, providerModels]) => (
+            <optgroup key={provider} label={provider}>
+              {providerModels.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.id.split(":")[1] || m.id}
+                </option>
+              ))}
+            </optgroup>
+          ))}
+        </select>
+      </div>
     </div>
   );
 }

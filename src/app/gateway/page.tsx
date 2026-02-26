@@ -183,6 +183,21 @@ function ProviderCard({
             </span>
           </div>
         )}
+        {provider.models && provider.models.length > 0 && (
+          <div className="mt-2">
+            <span className="text-zinc-500 text-xs">Models</span>
+            <div className="flex flex-wrap gap-1 mt-1">
+              {provider.models.map((model) => (
+                <span
+                  key={model}
+                  className="text-xs bg-blue-500/10 text-blue-400 px-2 py-0.5 rounded font-mono"
+                >
+                  {model}
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

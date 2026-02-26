@@ -6,6 +6,15 @@ export interface Agent {
   capabilities: string[];
   skills: string[];
   pid: number;
+  preferred_model: string;
+}
+
+export interface ModelEntry {
+  id: string; // "provider:model" format
+  object: string;
+  owned_by: string;
+  provider: string;
+  provider_type: string;
 }
 
 export interface PipelineRow {
@@ -53,6 +62,7 @@ export interface ProviderConfig {
   provider_type: string;
   extra_headers: Record<string, string>;
   rate_limit: { requests_per_minute: number; burst_size: number } | null;
+  models: string[];
 }
 
 export interface GatewayConfig {

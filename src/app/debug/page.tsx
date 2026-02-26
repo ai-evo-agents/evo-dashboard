@@ -2,6 +2,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { api } from "@/lib/api";
 import { useAgents } from "@/hooks/use-agents";
+import { useModels } from "@/hooks/use-models";
 import { getSocket } from "@/lib/socket";
 import type { DebugResponse, DebugStreamChunk, TaskChangedEvent } from "@/lib/types";
 
@@ -21,7 +22,7 @@ interface HistoryEntry {
   evaluationScore?: number;
 }
 
-const MODEL_PRESETS = [
+const FALLBACK_PRESETS = [
   { label: "Codex (default)", value: "codex-cli:default" },
   { label: "Claude Code", value: "claude-code:claude-sonnet-4-5" },
   { label: "GPT-4o Mini", value: "openai:gpt-4o-mini" },
@@ -51,6 +52,7 @@ type Mode = "llm" | "bash";
 
 export default function DebugPage() {
   const { agents } = useAgents();
+  const { models, byProvider } = useModels();
   const [mode, setMode] = useState<Mode>("llm");
   const [role, setRole] = useState("learning");
   const [model, setModel] = useState("codex-cli:default");
@@ -311,12 +313,24 @@ export default function DebugPage() {
                     value=""
                     className="bg-zinc-800 border border-zinc-700 rounded px-2 py-2 text-sm text-zinc-400 focus:outline-none"
                   >
-                    <option value="">Presets</option>
-                    {MODEL_PRESETS.map((p) => (
-                      <option key={p.value} value={p.value}>
-                        {p.label}
-                      </option>
-                    ))}
+                    <option value="">Models</option>
+                    {models.length > 0
+                      ? Object.entries(byProvider).map(
+                          ([provider, providerModels]) => (
+                            <optgroup key={provider} label={provider}>
+                              {providerModels.map((m) => (
+                                <option key={m.id} value={m.id}>
+                                  {m.id.split(":")[1] || m.id}
+                                </option>
+                              ))}
+                            </optgroup>
+                          )
+                        )
+                      : FALLBACK_PRESETS.map((p) => (
+                          <option key={p.value} value={p.value}>
+                            {p.label}
+                          </option>
+                        ))}
                   </select>
                 </div>
               </div>

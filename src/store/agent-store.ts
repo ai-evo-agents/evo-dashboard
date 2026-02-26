@@ -54,6 +54,7 @@ export const useAgentStore = create<AgentStore>((set) => ({
         capabilities: update.capabilities ?? [],
         skills: update.skills ?? [],
         pid: update.pid ?? 0,
+        preferred_model: update.preferred_model ?? "",
       };
       return { agents: [...state.agents, newAgent] };
     });
