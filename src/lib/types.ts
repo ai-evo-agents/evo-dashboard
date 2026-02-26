@@ -137,3 +137,9 @@ export interface DebugResponse {
   error?: string;
   latency_ms: number;
 }
+
+export interface DebugStreamChunk {
+  request_id: string;
+  delta: string;
+  chunk_index: number;
+}

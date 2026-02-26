@@ -3,7 +3,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { api } from "@/lib/api";
 import { useAgents } from "@/hooks/use-agents";
 import { getSocket } from "@/lib/socket";
-import type { DebugResponse } from "@/lib/types";
+import type { DebugResponse, DebugStreamChunk } from "@/lib/types";
 
 interface HistoryEntry {
   id: string;
@@ -13,7 +13,7 @@ interface HistoryEntry {
   response?: string;
   error?: string;
   latency_ms?: number;
-  status: "pending" | "done" | "error";
+  status: "pending" | "streaming" | "done" | "error";
   timestamp: string;
 }
 
@@ -36,25 +36,41 @@ export default function DebugPage() {
   // Deduplicate roles from agents
   const roles = [...new Set(agents.map((a) => a.role))].sort();
 
-  // Listen for debug:response events
+  // Listen for debug:stream (incremental tokens) and debug:response (final) events
   useEffect(() => {
     const socket = getSocket();
-    const handler = (data: { event: string; data: DebugResponse }) => {
-      if (data.event !== "debug:response") return;
-      const dr = data.data;
-      setHistory((prev) =>
-        prev.map((entry) =>
-          entry.id === dr.request_id
-            ? {
-                ...entry,
-                response: dr.response,
-                error: dr.error,
-                latency_ms: dr.latency_ms,
-                status: dr.error ? "error" : "done",
-              }
-            : entry
-        )
-      );
+    const handler = (data: { event: string; data: DebugResponse | DebugStreamChunk }) => {
+      if (data.event === "debug:stream") {
+        const chunk = data.data as DebugStreamChunk;
+        setHistory((prev) =>
+          prev.map((entry) =>
+            entry.id === chunk.request_id
+              ? {
+                  ...entry,
+                  response: (entry.response || "") + chunk.delta,
+                  status: entry.status === "pending" || entry.status === "streaming"
+                    ? "streaming"
+                    : entry.status,
+                }
+              : entry
+          )
+        );
+      } else if (data.event === "debug:response") {
+        const dr = data.data as DebugResponse;
+        setHistory((prev) =>
+          prev.map((entry) =>
+            entry.id === dr.request_id
+              ? {
+                  ...entry,
+                  response: dr.response || entry.response,
+                  error: dr.error,
+                  latency_ms: dr.latency_ms,
+                  status: dr.error ? "error" : "done",
+                }
+              : entry
+          )
+        );
+      }
     };
     socket.on("dashboard:event", handler);
     return () => {
@@ -215,6 +231,8 @@ export default function DebugPage() {
                   ? "border-red-500/40"
                   : entry.status === "pending"
                   ? "border-yellow-500/30"
+                  : entry.status === "streaming"
+                  ? "border-blue-500/30"
                   : "border-emerald-500/20"
               }`}
             >
@@ -230,6 +248,11 @@ export default function DebugPage() {
                   {entry.status === "pending" && (
                     <span className="text-yellow-400 animate-pulse">
                       waiting...
+                    </span>
+                  )}
+                  {entry.status === "streaming" && (
+                    <span className="text-emerald-400 animate-pulse">
+                      streaming...
                     </span>
                   )}
                   {entry.latency_ms !== undefined && (
@@ -262,7 +285,7 @@ export default function DebugPage() {
               </div>
 
               {/* Response */}
-              {(entry.response || entry.error) && (
+              {(entry.response || entry.error || entry.status === "streaming") && (
                 <div>
                   <span className="text-xs text-zinc-500 block mb-1">
                     {entry.error ? "Error" : "Response"}
@@ -275,6 +298,9 @@ export default function DebugPage() {
                     }`}
                   >
                     {entry.error || entry.response}
+                    {entry.status === "streaming" && (
+                      <span className="inline-block w-2 h-4 bg-emerald-400 animate-pulse ml-0.5 align-middle" />
+                    )}
                   </div>
                 </div>
               )}
