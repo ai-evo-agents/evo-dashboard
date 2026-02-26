@@ -136,10 +136,17 @@ export interface DebugResponse {
   response?: string;
   error?: string;
   latency_ms: number;
+  task_id?: string;
 }
 
 export interface DebugStreamChunk {
   request_id: string;
   delta: string;
   chunk_index: number;
+  task_id?: string;
+}
+
+export interface TaskChangedEvent {
+  action: string;
+  task: Task;
 }

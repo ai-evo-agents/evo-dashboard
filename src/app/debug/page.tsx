@@ -3,10 +3,11 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { api } from "@/lib/api";
 import { useAgents } from "@/hooks/use-agents";
 import { getSocket } from "@/lib/socket";
-import type { DebugResponse, DebugStreamChunk } from "@/lib/types";
+import type { DebugResponse, DebugStreamChunk, TaskChangedEvent } from "@/lib/types";
 
 interface HistoryEntry {
   id: string;
+  taskId?: string;
   role: string;
   model: string;
   prompt: string;
@@ -16,6 +17,8 @@ interface HistoryEntry {
   status: "pending" | "streaming" | "done" | "error";
   timestamp: string;
   entryType: "llm" | "bash";
+  evaluationSummary?: string;
+  evaluationScore?: number;
 }
 
 const MODEL_PRESETS = [
@@ -60,12 +63,13 @@ export default function DebugPage() {
   // Deduplicate roles from agents
   const roles = [...new Set(agents.map((a) => a.role))].sort();
 
-  // Listen for debug:stream (incremental tokens / PTY bytes) and debug:response (final)
+  // Listen for debug:stream (incremental tokens / PTY bytes), debug:response (final),
+  // and task:changed (evaluation results)
   useEffect(() => {
     const socket = getSocket();
     const handler = (data: {
       event: string;
-      data: DebugResponse | DebugStreamChunk;
+      data: DebugResponse | DebugStreamChunk | TaskChangedEvent;
     }) => {
       if (data.event === "debug:stream") {
         const chunk = data.data as DebugStreamChunk;
@@ -74,6 +78,7 @@ export default function DebugPage() {
             entry.id === chunk.request_id
               ? {
                   ...entry,
+                  taskId: entry.taskId || chunk.task_id,
                   response: (entry.response || "") + chunk.delta,
                   status:
                     entry.status === "pending" || entry.status === "streaming"
@@ -90,6 +95,7 @@ export default function DebugPage() {
             entry.id === dr.request_id
               ? {
                   ...entry,
+                  taskId: entry.taskId || dr.task_id,
                   // Append the final response to accumulated streaming content
                   response:
                     dr.response && dr.response !== "\n[exit 0]"
@@ -102,6 +108,21 @@ export default function DebugPage() {
               : entry
           )
         );
+      } else if (data.event === "task:changed") {
+        const tc = data.data as TaskChangedEvent;
+        if (tc.action === "evaluated" && tc.task?.summary) {
+          // Match by task_id — update the history entry that has this task_id
+          setHistory((prev) =>
+            prev.map((entry) =>
+              entry.taskId === tc.task.id
+                ? {
+                    ...entry,
+                    evaluationSummary: tc.task.summary,
+                  }
+                : entry
+            )
+          );
+        }
       }
     };
     socket.on("dashboard:event", handler);
@@ -124,6 +145,7 @@ export default function DebugPage() {
         setHistory((prev) => [
           {
             id: res.request_id!,
+            taskId: res.task_id,
             role,
             model,
             prompt,
@@ -167,6 +189,7 @@ export default function DebugPage() {
         setHistory((prev) => [
           {
             id: res.request_id || requestId,
+            taskId: res.task_id,
             role: "bash",
             model: "bash-pty",
             prompt: bashCommand,
@@ -430,19 +453,26 @@ export default function DebugPage() {
                     <span className="text-zinc-500">{entry.latency_ms}ms</span>
                   )}
                 </div>
-                <span
-                  className={`text-xs font-mono ${
-                    entry.status === "error"
-                      ? "text-red-400"
-                      : entry.status === "done"
-                      ? entry.entryType === "bash"
-                        ? "text-violet-400"
-                        : "text-emerald-400"
-                      : "text-yellow-400"
-                  }`}
-                >
-                  {entry.id.slice(0, 8)}
-                </span>
+                <div className="flex items-center gap-2">
+                  {entry.taskId && (
+                    <span className="text-xs font-mono bg-zinc-800 text-cyan-400 px-1.5 py-0.5 rounded" title={`Task: ${entry.taskId}`}>
+                      task:{entry.taskId.slice(0, 6)}
+                    </span>
+                  )}
+                  <span
+                    className={`text-xs font-mono ${
+                      entry.status === "error"
+                        ? "text-red-400"
+                        : entry.status === "done"
+                        ? entry.entryType === "bash"
+                          ? "text-violet-400"
+                          : "text-emerald-400"
+                        : "text-yellow-400"
+                    }`}
+                  >
+                    {entry.id.slice(0, 8)}
+                  </span>
+                </div>
               </div>
 
               {/* Command / Prompt */}
@@ -489,6 +519,18 @@ export default function DebugPage() {
                       />
                     )}
                   </div>
+                </div>
+              )}
+
+              {/* Evaluation summary badge */}
+              {entry.evaluationSummary && (
+                <div className="mt-2 flex items-start gap-2 bg-amber-900/20 border border-amber-500/30 rounded-lg p-2">
+                  <span className="text-xs font-medium text-amber-400 shrink-0 mt-0.5">
+                    ✦ Eval
+                  </span>
+                  <span className="text-xs text-amber-200/80 leading-relaxed">
+                    {entry.evaluationSummary}
+                  </span>
                 </div>
               )}
             </div>
