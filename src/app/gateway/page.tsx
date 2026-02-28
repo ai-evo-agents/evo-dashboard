@@ -42,7 +42,7 @@ export default function GatewayPage() {
     <div className="p-6 space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold">Gateway</h1>
-        {config && (
+        {config?.server && (
           <span className="text-sm text-zinc-500">
             {config.server.host}:{config.server.port}
           </span>
@@ -63,7 +63,7 @@ export default function GatewayPage() {
 
       {/* Provider grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {config?.providers.map((provider) => (
+        {config?.providers?.map((provider) => (
           <ProviderCard
             key={provider.name}
             provider={provider}

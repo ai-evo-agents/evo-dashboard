@@ -58,6 +58,12 @@ export const api = {
 
   taskCurrent: () => fetchJSON<{ task: Task | null }>("/task/current"),
 
+  createTask: (body: { task_type?: string; summary?: string; payload?: string }) =>
+    fetchJSON<{ success: boolean; task?: Task; error?: string }>("/tasks", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+
   taskLogs: (taskId: string, limit?: number, offset?: number) => {
     const qs = new URLSearchParams();
     if (limit) qs.set("limit", String(limit));
@@ -163,7 +169,7 @@ export const api = {
     }),
 
   memoryStats: () =>
-    fetchJSON<MemoryStats>("/memories/stats"),
+    fetchJSON<{ stats: MemoryStats }>("/memories/stats").then((r) => r.stats ?? {}),
 
   memoryTiers: (memoryId: string) =>
     fetchJSON<{ tiers: MemoryTier[]; count: number }>(`/memories/${memoryId}/tiers`),

@@ -5,6 +5,7 @@ import { useTaskLogs } from "@/hooks/use-task-logs";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { PIPELINE_STAGES } from "@/lib/types";
 import type { Task, TaskLog } from "@/lib/types";
+import { api } from "@/lib/api";
 
 const STAGE_LABELS: Record<string, string> = {
   learning: "Learning",
@@ -32,6 +33,7 @@ export default function TasksPage() {
   const { currentTask, history, loading } = useTasks();
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [showHistory, setShowHistory] = useState(false);
+  const [showCreateForm, setShowCreateForm] = useState(false);
 
   // When current task changes, auto-select it for log viewing
   const activeTaskId = selectedTaskId || currentTask?.id || null;
@@ -40,7 +42,17 @@ export default function TasksPage() {
     <div className="p-6 space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold">Tasks</h1>
+        <button
+          onClick={() => setShowCreateForm((v) => !v)}
+          className="px-3 py-1.5 rounded text-sm font-medium bg-blue-600 hover:bg-blue-500 text-white transition-colors"
+        >
+          + New Task
+        </button>
       </div>
+
+      {showCreateForm && (
+        <CreateTaskForm onClose={() => setShowCreateForm(false)} />
+      )}
 
       {/* Section A: Current Task Hero */}
       {loading ? (
@@ -124,6 +136,117 @@ export default function TasksPage() {
         )}
       </div>
     </div>
+  );
+}
+
+// ─── Create Task Form ────────────────────────────────────────────────────────
+
+function CreateTaskForm({ onClose }: { onClose: () => void }) {
+  const [taskType, setTaskType] = useState("manual");
+  const [summary, setSummary] = useState("");
+  const [payload, setPayload] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSubmitting(true);
+    setError(null);
+    try {
+      const res = await api.createTask({
+        task_type: taskType,
+        summary: summary.trim() || undefined,
+        payload: payload.trim() || undefined,
+      });
+      if (!res.success) throw new Error(res.error || "Failed to create task");
+      onClose();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unknown error");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <form
+      onSubmit={handleSubmit}
+      className="bg-zinc-900 border border-zinc-700 rounded-lg p-5 space-y-4"
+    >
+      <div className="flex items-center justify-between">
+        <h2 className="text-sm font-semibold text-zinc-200">New Task</h2>
+        <button
+          type="button"
+          onClick={onClose}
+          className="text-zinc-500 hover:text-zinc-300 text-xs"
+        >
+          ✕
+        </button>
+      </div>
+
+      <div className="grid grid-cols-2 gap-4">
+        <div className="space-y-1">
+          <label className="text-xs text-zinc-400">Task Type</label>
+          <select
+            value={taskType}
+            onChange={(e) => setTaskType(e.target.value)}
+            className="w-full bg-zinc-800 border border-zinc-700 rounded px-3 py-2 text-sm text-zinc-200 focus:outline-none focus:border-blue-500"
+          >
+            <option value="manual">manual</option>
+            <option value="pipeline">pipeline</option>
+            <option value="debug">debug</option>
+            <option value="cron">cron</option>
+          </select>
+        </div>
+
+        <div className="space-y-1">
+          <label className="text-xs text-zinc-400">Summary</label>
+          <input
+            type="text"
+            value={summary}
+            onChange={(e) => setSummary(e.target.value)}
+            placeholder="Brief description..."
+            className="w-full bg-zinc-800 border border-zinc-700 rounded px-3 py-2 text-sm text-zinc-200 placeholder-zinc-600 focus:outline-none focus:border-blue-500"
+          />
+        </div>
+      </div>
+
+      <div className="space-y-1">
+        <label className="text-xs text-zinc-400">
+          Payload{" "}
+          <span className="text-zinc-600">(JSON, optional)</span>
+        </label>
+        <textarea
+          value={payload}
+          onChange={(e) => setPayload(e.target.value)}
+          placeholder='{"key": "value"}'
+          rows={3}
+          className="w-full bg-zinc-800 border border-zinc-700 rounded px-3 py-2 text-sm text-zinc-200 placeholder-zinc-600 focus:outline-none focus:border-blue-500 font-mono resize-none"
+        />
+      </div>
+
+      {error && (
+        <div className="text-xs text-red-400 bg-red-500/10 border border-red-500/20 rounded px-3 py-2">
+          {error}
+        </div>
+      )}
+
+      <div className="flex justify-end gap-2">
+        <button
+          type="button"
+          onClick={onClose}
+          className="px-4 py-1.5 rounded text-sm text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 transition-colors"
+        >
+          Cancel
+        </button>
+        <button
+          type="submit"
+          disabled={submitting}
+          className="px-4 py-1.5 rounded text-sm font-medium bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white transition-colors"
+        >
+          {submitting ? "Creating..." : "Create Task"}
+        </button>
+      </div>
+    </form>
   );
 }
 

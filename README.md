@@ -13,7 +13,7 @@ Real-time dashboard for the [evo](https://github.com/lifefarmer/evo) multi-agent
 | `/` | **Overview** — king health, online agent count, active pipelines, recent events |
 | `/agents/` | **Agents** — card grid of all registered agents with status, capabilities, skills, and per-agent model selection dropdown |
 | `/pipeline/` | **Pipeline** — evolution pipeline runs and stage details |
-| `/tasks/` | **Tasks** — task list with status filters, detail view, and logs |
+| `/tasks/` | **Tasks** — task list with status filters, detail view, logs, and manual task creation |
 | `/gateway/` | **Gateway** — provider cards (with model badges), enable/disable toggle, config history |
 | `/memories/` | **Memories** — memory CRUD, search, stats, and tier inspection |
 | `/events/` | **Events** — live Socket.IO event stream |
@@ -146,6 +146,7 @@ All evo-king endpoints are wrapped in `src/lib/api.ts` as typed async functions:
 | `pipelineRuns()` | GET | `/pipeline/runs` | List pipeline runs |
 | `pipelineDetail(runId)` | GET | `/pipeline/runs/:id` | Stage history for a run |
 | `tasks(params?)` | GET | `/tasks` | List tasks (filterable) |
+| `createTask(body)` | POST | `/tasks` | Create a new task manually |
 | `taskCurrent()` | GET | `/task/current` | Get the current active task |
 | `taskLogs(taskId, limit?, offset?)` | GET | `/task/:id/logs` | Fetch task logs |
 | `gatewayConfig()` | GET | `/gateway/config` | Read gateway config |

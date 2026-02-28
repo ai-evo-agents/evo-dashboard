@@ -24,7 +24,7 @@ export default function OverviewPage() {
   }, []);
 
   const onlineCount = agents.filter(
-    (a) => a.status === "online" || a.status === "heartbeat"
+    (a) => a.status === "online" || a.status === "heartbeat" || a.status === "alive"
   ).length;
   const activeRuns = runs.filter((r) => r.status === "running");
 

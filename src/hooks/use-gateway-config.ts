@@ -11,7 +11,10 @@ export function useGatewayConfig() {
   const refresh = useCallback(async () => {
     try {
       const data = await api.gatewayConfig();
-      setConfig(data);
+      // Only store if it's a valid config (not an error response)
+      if (data && data.providers) {
+        setConfig(data);
+      }
     } catch {
       // keep stale
     } finally {
