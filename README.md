@@ -17,6 +17,7 @@ Real-time dashboard for the [evo](https://github.com/lifefarmer/evo) multi-agent
 | `/gateway/` | **Gateway** — provider cards (with model badges), enable/disable toggle, config history |
 | `/memories/` | **Memories** — memory CRUD, search, stats, and tier inspection |
 | `/events/` | **Events** — live Socket.IO event stream |
+| `/traces/` | **Traces** — distributed trace viewer with span waterfall, span detail panel, and filters (service, status, min duration) |
 | `/debug/` | **Debug** — LLM prompt tester (with model selector) and bash PTY runner; streams responses in real-time |
 | `/settings/` | **Settings** — cron jobs and config sync |
 
@@ -60,6 +61,7 @@ src/
     gateway/page.tsx    # Provider cards with model badges
     memories/page.tsx
     events/page.tsx
+    traces/page.tsx     # Two-panel trace viewer: list + waterfall + span detail
     debug/page.tsx      # LLM prompt + bash PTY with model selector
     settings/page.tsx
   components/
@@ -67,6 +69,9 @@ src/
     shared/
       status-badge.tsx  # Reusable status indicator
       json-viewer.tsx   # Collapsible JSON display
+    traces/
+      span-waterfall.tsx  # Span tree with horizontal timing bars, color-coded by service
+      span-detail.tsx     # Selected span metadata, attributes, and events
   hooks/
     use-agents.ts       # Agent list with real-time Socket.IO updates
     use-models.ts       # Fetches available models from gateway, groups by provider
@@ -76,6 +81,7 @@ src/
     use-tasks.ts        # Task list with filters
     use-task-logs.ts    # Task log entries
     use-memories.ts     # Memory CRUD + search
+    use-traces.ts       # Trace list (10s poll) + trace detail
   store/
     agent-store.ts      # Zustand store for agents (upsert, heartbeat, effective status)
   lib/
@@ -160,6 +166,8 @@ All evo-king endpoints are wrapped in `src/lib/api.ts` as typed async functions:
 | `taskMemories(taskId)` | GET | `/task/:id/memories` | Memories linked to a task |
 | `debugPrompt(params)` | POST | `/debug/prompt` | Send an LLM prompt via gateway |
 | `debugBash(params)` | POST | `/debug/bash` | Run a bash command via PTY |
+| `traces(params?)` | GET | `/traces` | List traces (filterable by service, status, min duration) |
+| `traceDetail(traceId)` | GET | `/traces/:id` | Trace metadata + all spans |
 
 ---
 

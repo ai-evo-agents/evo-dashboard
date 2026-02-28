@@ -11,6 +11,8 @@ import type {
   MemoryStats,
   MemoryTier,
   ModelEntry,
+  Trace,
+  Span,
 } from "./types";
 
 const BASE = process.env.NEXT_PUBLIC_KING_URL || "";
@@ -196,4 +198,28 @@ export const api = {
       "/debug/bash",
       { method: "POST", body: JSON.stringify(params) }
     ),
+
+  // ── Traces ────────────────────────────────────────────────────────────────
+
+  traces: (params?: {
+    service?: string;
+    status?: number;
+    min_duration_ms?: number;
+    limit?: number;
+    offset?: number;
+  }) => {
+    const qs = new URLSearchParams();
+    if (params?.service) qs.set("service", params.service);
+    if (params?.status !== undefined) qs.set("status", String(params.status));
+    if (params?.min_duration_ms) qs.set("min_duration_ms", String(params.min_duration_ms));
+    if (params?.limit) qs.set("limit", String(params.limit));
+    if (params?.offset) qs.set("offset", String(params.offset));
+    const query = qs.toString();
+    return fetchJSON<{ traces: Trace[]; count: number }>(
+      `/traces${query ? `?${query}` : ""}`
+    );
+  },
+
+  traceDetail: (traceId: string) =>
+    fetchJSON<{ trace: Trace; spans: Span[] }>(`/traces/${traceId}`),
 };

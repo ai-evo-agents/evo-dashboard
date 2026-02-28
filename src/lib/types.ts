@@ -160,3 +160,55 @@ export interface TaskChangedEvent {
   action: string;
   task: Task;
 }
+
+// ── OpenTelemetry tracing types ───────────────────────────────────────────
+
+export interface Trace {
+  trace_id: string;
+  service_name: string;
+  root_span_name: string;
+  start_time_ns: number;
+  end_time_ns: number;
+  duration_ns: number;
+  status_code: number; // 0=unset, 1=ok, 2=error
+  span_count: number;
+  resource: Record<string, unknown>;
+  updated_at: string;
+}
+
+export interface Span {
+  span_id: string;
+  trace_id: string;
+  parent_span_id: string;
+  name: string;
+  kind: number;
+  service_name: string;
+  start_time_ns: number;
+  end_time_ns: number;
+  duration_ns: number;
+  status_code: number;
+  status_message: string;
+  attributes: unknown[];
+  events: SpanEvent[];
+}
+
+export interface SpanEvent {
+  name: string;
+  time_unix_nano: number;
+  attributes: unknown[];
+}
+
+export const SPAN_KIND_NAMES: Record<number, string> = {
+  0: "Unspecified",
+  1: "Internal",
+  2: "Server",
+  3: "Client",
+  4: "Producer",
+  5: "Consumer",
+};
+
+export const STATUS_NAMES: Record<number, string> = {
+  0: "Unset",
+  1: "OK",
+  2: "Error",
+};
