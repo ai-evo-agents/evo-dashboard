@@ -9,12 +9,25 @@ export interface Agent {
   preferred_model: string;
 }
 
+export interface ModelCost {
+  input: number; // USD per 1M tokens
+  output: number;
+  cache_read?: number;
+  cache_write?: number;
+}
+
 export interface ModelEntry {
   id: string; // "provider:model" format
   object: string;
   owned_by: string;
   provider: string;
   provider_type: string;
+  // Rich metadata (optional — present when model_metadata is configured)
+  context_window?: number;
+  max_tokens?: number;
+  reasoning?: boolean;
+  input_types?: string[];
+  cost?: ModelCost;
 }
 
 export interface PipelineRow {

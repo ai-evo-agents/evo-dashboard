@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useState, useCallback } from "react";
 import { api } from "@/lib/api";
+import { getSocket } from "@/lib/socket";
 import type { GatewayConfig } from "@/lib/types";
 
 export function useGatewayConfig() {
@@ -40,6 +41,17 @@ export function useGatewayConfig() {
 
   useEffect(() => {
     refresh();
+
+    // Auto-refresh when gateway config changes
+    const socket = getSocket();
+    const handler = () => {
+      refresh();
+    };
+    socket.on("king:config_update", handler);
+
+    return () => {
+      socket.off("king:config_update", handler);
+    };
   }, [refresh]);
 
   return { config, loading, saving, save, refresh };
