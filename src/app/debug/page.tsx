@@ -17,7 +17,7 @@ interface HistoryEntry {
   latency_ms?: number;
   status: "pending" | "streaming" | "done" | "error";
   timestamp: string;
-  entryType: "llm" | "bash";
+  entryType: "llm" | "bash" | "gateway";
   evaluationSummary?: string;
   evaluationScore?: number;
 }
@@ -30,6 +30,8 @@ const FALLBACK_PRESETS = [
   { label: "GPT-4o Mini", value: "openai:gpt-4o-mini" },
   { label: "GPT-4o", value: "openai:gpt-4o" },
 ];
+
+const DEFAULT_REASONING_LEVELS = ["low", "medium", "high", "xhigh"];
 
 /** Strip ANSI/VT escape sequences so raw PTY output displays as plain text. */
 function stripAnsi(str: string): string {
@@ -50,7 +52,7 @@ function stripAnsi(str: string): string {
   );
 }
 
-type Mode = "llm" | "bash";
+type Mode = "llm" | "bash" | "gateway";
 
 export default function DebugPage() {
   const { agents } = useAgents();
@@ -60,12 +62,17 @@ export default function DebugPage() {
   const [model, setModel] = useState("codex-auth:gpt-5.1-codex-mini");
   const [prompt, setPrompt] = useState("");
   const [bashCommand, setBashCommand] = useState("");
+  const [reasoningEffort, setReasoningEffort] = useState("high");
+  const [systemPrompt, setSystemPrompt] = useState("");
   const [sending, setSending] = useState(false);
   const [history, setHistory] = useState<HistoryEntry[]>([]);
   const responseRef = useRef<HTMLDivElement>(null);
 
   // Deduplicate roles from agents
   const roles = [...new Set(agents.map((a) => a.role))].sort();
+
+  // Selected model metadata
+  const selectedModel = models.find((m) => m.id === model);
 
   // Listen for debug:stream (incremental tokens / PTY bytes), debug:response (final),
   // and task:changed (evaluation results)
@@ -224,6 +231,211 @@ export default function DebugPage() {
     }
   }, [bashCommand, sending]);
 
+  /** Send a request directly to the gateway API (bypasses king pipeline). */
+  const sendGateway = useCallback(async () => {
+    if (!prompt.trim() || sending) return;
+    setSending(true);
+    const entryId = crypto.randomUUID();
+    const t0 = Date.now();
+
+    setHistory((prev) => [
+      {
+        id: entryId,
+        role: "direct",
+        model,
+        prompt,
+        status: "pending",
+        timestamp: new Date().toLocaleTimeString(),
+        entryType: "gateway",
+      },
+      ...prev,
+    ]);
+
+    try {
+      const messages: { role: string; content: string }[] = [];
+      if (systemPrompt.trim()) {
+        messages.push({ role: "system", content: systemPrompt.trim() });
+      }
+      messages.push({ role: "user", content: prompt });
+
+      const res = await fetch("http://localhost:8080/v1/chat/completions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model,
+          messages,
+          stream: true,
+          model_reasoning_effort: reasoningEffort,
+        }),
+      });
+
+      if (!res.ok || !res.body) {
+        const errText = await res.text().catch(() => "");
+        throw new Error(`HTTP ${res.status}: ${errText}`);
+      }
+
+      // Transition to streaming
+      setHistory((prev) =>
+        prev.map((e) =>
+          e.id === entryId ? { ...e, status: "streaming" } : e
+        )
+      );
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buf = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buf += decoder.decode(value, { stream: true });
+        const lines = buf.split("\n");
+        buf = lines.pop() ?? "";
+        for (const line of lines) {
+          if (!line.startsWith("data: ")) continue;
+          const payload = line.slice(6).trim();
+          if (payload === "[DONE]") continue;
+          try {
+            const chunk = JSON.parse(payload);
+            const delta: string = chunk.choices?.[0]?.delta?.content ?? "";
+            if (delta) {
+              setHistory((prev) =>
+                prev.map((e) =>
+                  e.id === entryId
+                    ? { ...e, response: (e.response || "") + delta }
+                    : e
+                )
+              );
+            }
+          } catch {
+            // Ignore malformed SSE lines
+          }
+        }
+      }
+
+      setHistory((prev) =>
+        prev.map((e) =>
+          e.id === entryId
+            ? { ...e, status: "done", latency_ms: Date.now() - t0 }
+            : e
+        )
+      );
+      setPrompt("");
+    } catch (err) {
+      setHistory((prev) =>
+        prev.map((e) =>
+          e.id === entryId
+            ? { ...e, status: "error", error: String(err) }
+            : e
+        )
+      );
+    } finally {
+      setSending(false);
+    }
+  }, [prompt, sending, model, systemPrompt, reasoningEffort]);
+
+  // Shared model picker JSX (used in both LLM and Gateway modes)
+  const modelPicker = (
+    <div>
+      <label className="block text-xs text-zinc-500 mb-1">
+        Model (provider:model)
+      </label>
+      <div className="flex gap-2">
+        <input
+          value={model}
+          onChange={(e) => setModel(e.target.value)}
+          placeholder="provider:model (e.g. codex-auth:gpt-5.3-codex)"
+          className="flex-1 bg-zinc-800 border border-zinc-700 rounded px-3 py-2 text-sm text-zinc-200 font-mono focus:outline-none focus:border-emerald-500"
+        />
+        <select
+          onChange={(e) => {
+            if (e.target.value) setModel(e.target.value);
+          }}
+          value=""
+          className="bg-zinc-800 border border-zinc-700 rounded px-2 py-2 text-sm text-zinc-400 focus:outline-none"
+        >
+          <option value="">Models</option>
+          {models.length > 0
+            ? Object.entries(byProvider).map(
+                ([provider, providerModels]) => (
+                  <optgroup key={provider} label={provider}>
+                    {providerModels.map((m) => {
+                      const name = m.id.split(":")[1] || m.id;
+                      const meta: string[] = [];
+                      if (m.context_window)
+                        meta.push(
+                          `${m.context_window >= 1000 ? Math.round(m.context_window / 1000) + "K" : m.context_window} ctx`
+                        );
+                      if (m.reasoning) meta.push("reasoning");
+                      const suffix =
+                        meta.length > 0
+                          ? ` (${meta.join(", ")})`
+                          : "";
+                      return (
+                        <option key={m.id} value={m.id}>
+                          {name}
+                          {suffix}
+                        </option>
+                      );
+                    })}
+                  </optgroup>
+                )
+              )
+            : FALLBACK_PRESETS.map((p) => (
+                <option key={p.value} value={p.value}>
+                  {p.label}
+                </option>
+              ))}
+        </select>
+      </div>
+      {/* Selected model metadata badges */}
+      {(() => {
+        if (
+          !selectedModel ||
+          (!selectedModel.context_window &&
+            !selectedModel.max_tokens &&
+            !selectedModel.reasoning &&
+            !(
+              selectedModel.input_types &&
+              selectedModel.input_types.length > 1
+            ))
+        )
+          return null;
+        return (
+          <div className="flex flex-wrap gap-1 mt-1">
+            {selectedModel.context_window && (
+              <span className="text-[10px] bg-zinc-800 text-zinc-400 px-1.5 py-0.5 rounded">
+                {selectedModel.context_window >= 1000
+                  ? Math.round(selectedModel.context_window / 1000) + "K"
+                  : selectedModel.context_window}{" "}
+                ctx
+              </span>
+            )}
+            {selectedModel.max_tokens && (
+              <span className="text-[10px] bg-zinc-800 text-zinc-400 px-1.5 py-0.5 rounded">
+                {selectedModel.max_tokens >= 1000
+                  ? Math.round(selectedModel.max_tokens / 1000) + "K"
+                  : selectedModel.max_tokens}{" "}
+                out
+              </span>
+            )}
+            {selectedModel.reasoning && (
+              <span className="text-[10px] bg-amber-500/10 text-amber-400 px-1.5 py-0.5 rounded">
+                reasoning
+              </span>
+            )}
+            {selectedModel.input_types &&
+              selectedModel.input_types.length > 1 && (
+                <span className="text-[10px] bg-cyan-500/10 text-cyan-400 px-1.5 py-0.5 rounded">
+                  {selectedModel.input_types.join("+")}
+                </span>
+              )}
+          </div>
+        );
+      })()}
+    </div>
+  );
+
   return (
     <div className="p-6 space-y-6 h-full flex flex-col">
       {/* Header */}
@@ -252,11 +464,23 @@ export default function DebugPage() {
             >
               Bash PTY
             </button>
+            <button
+              onClick={() => setMode("gateway")}
+              className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                mode === "gateway"
+                  ? "bg-sky-600 text-white"
+                  : "text-zinc-400 hover:text-zinc-200"
+              }`}
+            >
+              Gateway
+            </button>
           </div>
           <span className="text-sm text-zinc-500">
             {mode === "llm"
               ? "Send prompts to agents via gateway"
-              : "Run bash commands with VTY — realtime output"}
+              : mode === "bash"
+              ? "Run bash commands with VTY — realtime output"
+              : "Direct HTTP to gateway — raw SSE, no king pipeline"}
           </span>
         </div>
       </div>
@@ -297,106 +521,7 @@ export default function DebugPage() {
               </div>
 
               {/* Model */}
-              <div>
-                <label className="block text-xs text-zinc-500 mb-1">
-                  Model (provider:model)
-                </label>
-                <div className="flex gap-2">
-                  <input
-                    value={model}
-                    onChange={(e) => setModel(e.target.value)}
-                    placeholder="provider:model (e.g. codex-auth:gpt-5.3-codex)"
-                    className="flex-1 bg-zinc-800 border border-zinc-700 rounded px-3 py-2 text-sm text-zinc-200 font-mono focus:outline-none focus:border-emerald-500"
-                  />
-                  <select
-                    onChange={(e) => {
-                      if (e.target.value) setModel(e.target.value);
-                    }}
-                    value=""
-                    className="bg-zinc-800 border border-zinc-700 rounded px-2 py-2 text-sm text-zinc-400 focus:outline-none"
-                  >
-                    <option value="">Models</option>
-                    {models.length > 0
-                      ? Object.entries(byProvider).map(
-                          ([provider, providerModels]) => (
-                            <optgroup key={provider} label={provider}>
-                              {providerModels.map((m) => {
-                                const name = m.id.split(":")[1] || m.id;
-                                const meta: string[] = [];
-                                if (m.context_window)
-                                  meta.push(
-                                    `${m.context_window >= 1000 ? Math.round(m.context_window / 1000) + "K" : m.context_window} ctx`
-                                  );
-                                if (m.reasoning) meta.push("reasoning");
-                                const suffix =
-                                  meta.length > 0
-                                    ? ` (${meta.join(", ")})`
-                                    : "";
-                                return (
-                                  <option key={m.id} value={m.id}>
-                                    {name}
-                                    {suffix}
-                                  </option>
-                                );
-                              })}
-                            </optgroup>
-                          )
-                        )
-                      : FALLBACK_PRESETS.map((p) => (
-                          <option key={p.value} value={p.value}>
-                            {p.label}
-                          </option>
-                        ))}
-                  </select>
-                </div>
-                {/* Selected model metadata badges */}
-                {(() => {
-                  const selected = models.find((m) => m.id === model);
-                  if (
-                    !selected ||
-                    (!selected.context_window &&
-                      !selected.max_tokens &&
-                      !selected.reasoning &&
-                      !(
-                        selected.input_types &&
-                        selected.input_types.length > 1
-                      ))
-                  )
-                    return null;
-                  return (
-                    <div className="flex flex-wrap gap-1 mt-1">
-                      {selected.context_window && (
-                        <span className="text-[10px] bg-zinc-800 text-zinc-400 px-1.5 py-0.5 rounded">
-                          {selected.context_window >= 1000
-                            ? Math.round(selected.context_window / 1000) +
-                              "K"
-                            : selected.context_window}{" "}
-                          ctx
-                        </span>
-                      )}
-                      {selected.max_tokens && (
-                        <span className="text-[10px] bg-zinc-800 text-zinc-400 px-1.5 py-0.5 rounded">
-                          {selected.max_tokens >= 1000
-                            ? Math.round(selected.max_tokens / 1000) + "K"
-                            : selected.max_tokens}{" "}
-                          out
-                        </span>
-                      )}
-                      {selected.reasoning && (
-                        <span className="text-[10px] bg-amber-500/10 text-amber-400 px-1.5 py-0.5 rounded">
-                          reasoning
-                        </span>
-                      )}
-                      {selected.input_types &&
-                        selected.input_types.length > 1 && (
-                          <span className="text-[10px] bg-cyan-500/10 text-cyan-400 px-1.5 py-0.5 rounded">
-                            {selected.input_types.join("+")}
-                          </span>
-                        )}
-                    </div>
-                  );
-                })()}
-              </div>
+              {modelPicker}
             </div>
 
             {/* Prompt */}
@@ -427,7 +552,7 @@ export default function DebugPage() {
               </button>
             </div>
           </>
-        ) : (
+        ) : mode === "bash" ? (
           <>
             {/* Bash command input */}
             <div>
@@ -462,6 +587,86 @@ export default function DebugPage() {
               </button>
             </div>
           </>
+        ) : (
+          /* Gateway Direct mode */
+          <>
+            {/* Model picker (reused) */}
+            {modelPicker}
+
+            {/* Reasoning effort selector — shown only for models with reasoning support */}
+            {selectedModel?.reasoning && (
+              <div>
+                <label className="block text-xs text-zinc-500 mb-1">
+                  Reasoning Effort
+                </label>
+                <div className="flex gap-1">
+                  {(
+                    selectedModel.reasoning_levels ?? DEFAULT_REASONING_LEVELS
+                  ).map((level) => (
+                    <button
+                      key={level}
+                      onClick={() => setReasoningEffort(level)}
+                      className={`px-3 py-1 text-xs font-mono rounded transition-colors ${
+                        reasoningEffort === level
+                          ? "bg-sky-600 text-white"
+                          : "bg-zinc-800 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-700"
+                      }`}
+                    >
+                      {level}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* System prompt */}
+            <div>
+              <label className="block text-xs text-zinc-500 mb-1">
+                System Prompt{" "}
+                <span className="text-zinc-600">(optional)</span>
+              </label>
+              <textarea
+                value={systemPrompt}
+                onChange={(e) => setSystemPrompt(e.target.value)}
+                rows={2}
+                placeholder="Optional system prompt..."
+                className="w-full bg-zinc-800 border border-zinc-700 rounded px-3 py-2 text-sm text-zinc-200 resize-y focus:outline-none focus:border-sky-500"
+              />
+            </div>
+
+            {/* User prompt */}
+            <div>
+              <label className="block text-xs text-zinc-500 mb-1">Prompt</label>
+              <textarea
+                value={prompt}
+                onChange={(e) => setPrompt(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && (e.metaKey || e.ctrlKey))
+                    sendGateway();
+                }}
+                rows={3}
+                placeholder="Type a prompt... (Cmd+Enter to send)"
+                className="w-full bg-zinc-800 border border-zinc-700 rounded px-3 py-2 text-sm text-zinc-200 resize-y focus:outline-none focus:border-sky-500"
+              />
+            </div>
+
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-zinc-600">
+                POST{" "}
+                <code className="text-sky-400 bg-zinc-800 px-1 rounded">
+                  localhost:8080/v1/chat/completions
+                </code>{" "}
+                — model_reasoning_effort passed in body
+              </span>
+              <button
+                onClick={sendGateway}
+                disabled={sending || !prompt.trim()}
+                className="px-4 py-2 bg-sky-600 hover:bg-sky-500 disabled:bg-zinc-700 disabled:text-zinc-500 text-white text-sm font-medium rounded transition-colors"
+              >
+                {sending ? "Sending..." : "Send Direct"}
+              </button>
+            </div>
+          </>
         )}
       </div>
 
@@ -471,7 +676,9 @@ export default function DebugPage() {
           <div className="text-center text-zinc-600 py-12">
             {mode === "llm"
               ? "No debug prompts sent yet. Send one above to test the gateway pipeline."
-              : 'No bash commands run yet. Try:  codex exec --ephemeral --full-auto "hello world"'}
+              : mode === "bash"
+              ? 'No bash commands run yet. Try:  codex exec --ephemeral --full-auto "hello world"'
+              : "No direct requests sent yet. Select a model and send a prompt to test the gateway API."}
           </div>
         ) : (
           history.map((entry) => (
@@ -485,9 +692,13 @@ export default function DebugPage() {
                   : entry.status === "streaming"
                   ? entry.entryType === "bash"
                     ? "border-violet-500/30"
+                    : entry.entryType === "gateway"
+                    ? "border-sky-500/30"
                     : "border-blue-500/30"
                   : entry.entryType === "bash"
                   ? "border-violet-500/20"
+                  : entry.entryType === "gateway"
+                  ? "border-sky-500/20"
                   : "border-emerald-500/20"
               }`}
             >
@@ -499,6 +710,15 @@ export default function DebugPage() {
                     <span className="bg-violet-900/40 text-violet-400 px-2 py-0.5 rounded font-mono">
                       bash-pty
                     </span>
+                  ) : entry.entryType === "gateway" ? (
+                    <>
+                      <span className="bg-sky-900/40 text-sky-400 px-2 py-0.5 rounded text-[10px]">
+                        direct
+                      </span>
+                      <span className="bg-zinc-800 text-sky-400 px-2 py-0.5 rounded font-mono">
+                        {entry.model}
+                      </span>
+                    </>
                   ) : (
                     <>
                       <span className="bg-zinc-800 text-zinc-400 px-2 py-0.5 rounded">
@@ -520,6 +740,8 @@ export default function DebugPage() {
                       className={`animate-pulse ${
                         entry.entryType === "bash"
                           ? "text-violet-400"
+                          : entry.entryType === "gateway"
+                          ? "text-sky-400"
                           : "text-emerald-400"
                       }`}
                     >
@@ -543,6 +765,8 @@ export default function DebugPage() {
                         : entry.status === "done"
                         ? entry.entryType === "bash"
                           ? "text-violet-400"
+                          : entry.entryType === "gateway"
+                          ? "text-sky-400"
                           : "text-emerald-400"
                         : "text-yellow-400"
                     }`}
@@ -591,6 +815,8 @@ export default function DebugPage() {
                         className={`inline-block w-2 h-4 animate-pulse ml-0.5 align-middle ${
                           entry.entryType === "bash"
                             ? "bg-violet-400"
+                            : entry.entryType === "gateway"
+                            ? "bg-sky-400"
                             : "bg-emerald-400"
                         }`}
                       />

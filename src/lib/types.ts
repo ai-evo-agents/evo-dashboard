@@ -28,6 +28,9 @@ export interface ModelEntry {
   reasoning?: boolean;
   input_types?: string[];
   cost?: ModelCost;
+  // Per-model supported reasoning effort levels from WHAM discovery
+  // e.g. ["low", "medium", "high"] — only present for codex-auth models
+  reasoning_levels?: string[];
 }
 
 export interface PipelineRow {

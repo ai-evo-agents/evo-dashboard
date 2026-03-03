@@ -2,7 +2,7 @@
 
 Real-time dashboard for the [evo](https://github.com/lifefarmer/evo) multi-agent system. Built with Next.js 16, React 19, Tailwind CSS 4, and Zustand. Connects to `evo-king` (port 3000) via REST and Socket.IO for live updates.
 
-**Version:** 0.2.0
+**Version:** 0.2.1
 
 ---
 
@@ -18,7 +18,7 @@ Real-time dashboard for the [evo](https://github.com/lifefarmer/evo) multi-agent
 | `/memories/` | **Memories** — memory CRUD, search, stats, and tier inspection |
 | `/events/` | **Events** — live Socket.IO event stream |
 | `/traces/` | **Traces** — distributed trace viewer with span waterfall, span detail panel, and filters (service, status, min duration) |
-| `/debug/` | **Debug** — LLM prompt tester and bash PTY runner; model selector shows live gateway models with context-window and reasoning metadata badges, defaults to codex-auth |
+| `/debug/` | **Debug** — three-mode console: **LLM** (route via king agent pipeline), **Bash PTY** (shell commands), **Gateway** (direct `POST /v1/chat/completions` with SSE streaming, per-model reasoning effort selector, optional system prompt) |
 | `/settings/` | **Settings** — cron jobs and config sync |
 
 ---
@@ -110,10 +110,11 @@ Each agent card on the `/agents/` page includes a model dropdown populated dynam
 
 Models are fetched from `GET /gateway/models` rather than being hardcoded. The response follows the OpenAI-compatible list format with optional rich metadata.
 
-- **Type:** `ModelEntry` — `{ id, object, owned_by, provider, provider_type, context_window?, max_tokens?, reasoning?, input_types?, cost? }`
+- **Type:** `ModelEntry` — `{ id, object, owned_by, provider, provider_type, context_window?, max_tokens?, reasoning?, input_types?, cost?, reasoning_levels? }`
   - `id` uses `provider:model` format (e.g. `openai:gpt-4o`)
   - `provider` and `provider_type` identify the gateway backend
   - Optional metadata fields are present when `model_metadata` is configured in `gateway.json`
+  - `reasoning_levels` is populated for codex-auth models from WHAM discovery (e.g. `["low","medium","high","xhigh"]`)
 - **Type:** `ModelCost` — `{ input, output, cache_read?, cache_write? }` (USD per 1M tokens)
 - **API function:** `api.gatewayModels()` returns `{ object, data: ModelEntry[] }`
 - **Hook:** `useModels()` — returns `{ models, byProvider, loading, refreshing, refresh, lastRefresh }`
@@ -139,9 +140,10 @@ The gateway page (`/gateway/`) shows all configured providers as cards with live
 
 ### Debug Console
 
-Two modes:
-- **LLM** — send prompts to any agent role through the gateway, with agent role and model selectors. Responses stream in real-time via `debug:stream` Socket.IO events. Task evaluations appear as inline badges.
+Three modes:
+- **LLM** — send prompts to any agent role through the king pipeline, with agent role and model selectors. Responses stream in real-time via `debug:stream` Socket.IO events. Task evaluations appear as inline badges.
 - **Bash PTY** — run shell commands with full terminal output streamed via Socket.IO.
+- **Gateway** — POST directly to `http://localhost:8080/v1/chat/completions` with SSE streaming, bypassing the king agent pipeline entirely. Includes a per-model reasoning effort selector (levels from WHAM-discovered `reasoning_levels`, e.g. `low / medium / high / xhigh`) and an optional system prompt textarea. Useful for raw gateway testing and reasoning effort tuning without a soul.md.
 
 ---
 
