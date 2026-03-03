@@ -23,7 +23,9 @@ interface HistoryEntry {
 }
 
 const FALLBACK_PRESETS = [
-  { label: "Codex (default)", value: "codex-cli:default" },
+  { label: "Codex Auth (gpt-5.3-codex)", value: "codex-auth:gpt-5.3-codex" },
+  { label: "Codex Auth (gpt-5.1-codex-mini)", value: "codex-auth:gpt-5.1-codex-mini" },
+  { label: "Codex CLI (default)", value: "codex-cli:default" },
   { label: "Claude Code", value: "claude-code:claude-sonnet-4-5" },
   { label: "GPT-4o Mini", value: "openai:gpt-4o-mini" },
   { label: "GPT-4o", value: "openai:gpt-4o" },
@@ -55,7 +57,7 @@ export default function DebugPage() {
   const { models, byProvider } = useModels();
   const [mode, setMode] = useState<Mode>("llm");
   const [role, setRole] = useState("learning");
-  const [model, setModel] = useState("codex-cli:default");
+  const [model, setModel] = useState("codex-auth:gpt-5.1-codex-mini");
   const [prompt, setPrompt] = useState("");
   const [bashCommand, setBashCommand] = useState("");
   const [sending, setSending] = useState(false);
@@ -303,7 +305,7 @@ export default function DebugPage() {
                   <input
                     value={model}
                     onChange={(e) => setModel(e.target.value)}
-                    placeholder="provider:model (e.g. codex-cli:default)"
+                    placeholder="provider:model (e.g. codex-auth:gpt-5.3-codex)"
                     className="flex-1 bg-zinc-800 border border-zinc-700 rounded px-3 py-2 text-sm text-zinc-200 font-mono focus:outline-none focus:border-emerald-500"
                   />
                   <select
@@ -318,11 +320,25 @@ export default function DebugPage() {
                       ? Object.entries(byProvider).map(
                           ([provider, providerModels]) => (
                             <optgroup key={provider} label={provider}>
-                              {providerModels.map((m) => (
-                                <option key={m.id} value={m.id}>
-                                  {m.id.split(":")[1] || m.id}
-                                </option>
-                              ))}
+                              {providerModels.map((m) => {
+                                const name = m.id.split(":")[1] || m.id;
+                                const meta: string[] = [];
+                                if (m.context_window)
+                                  meta.push(
+                                    `${m.context_window >= 1000 ? Math.round(m.context_window / 1000) + "K" : m.context_window} ctx`
+                                  );
+                                if (m.reasoning) meta.push("reasoning");
+                                const suffix =
+                                  meta.length > 0
+                                    ? ` (${meta.join(", ")})`
+                                    : "";
+                                return (
+                                  <option key={m.id} value={m.id}>
+                                    {name}
+                                    {suffix}
+                                  </option>
+                                );
+                              })}
                             </optgroup>
                           )
                         )
@@ -333,6 +349,53 @@ export default function DebugPage() {
                         ))}
                   </select>
                 </div>
+                {/* Selected model metadata badges */}
+                {(() => {
+                  const selected = models.find((m) => m.id === model);
+                  if (
+                    !selected ||
+                    (!selected.context_window &&
+                      !selected.max_tokens &&
+                      !selected.reasoning &&
+                      !(
+                        selected.input_types &&
+                        selected.input_types.length > 1
+                      ))
+                  )
+                    return null;
+                  return (
+                    <div className="flex flex-wrap gap-1 mt-1">
+                      {selected.context_window && (
+                        <span className="text-[10px] bg-zinc-800 text-zinc-400 px-1.5 py-0.5 rounded">
+                          {selected.context_window >= 1000
+                            ? Math.round(selected.context_window / 1000) +
+                              "K"
+                            : selected.context_window}{" "}
+                          ctx
+                        </span>
+                      )}
+                      {selected.max_tokens && (
+                        <span className="text-[10px] bg-zinc-800 text-zinc-400 px-1.5 py-0.5 rounded">
+                          {selected.max_tokens >= 1000
+                            ? Math.round(selected.max_tokens / 1000) + "K"
+                            : selected.max_tokens}{" "}
+                          out
+                        </span>
+                      )}
+                      {selected.reasoning && (
+                        <span className="text-[10px] bg-amber-500/10 text-amber-400 px-1.5 py-0.5 rounded">
+                          reasoning
+                        </span>
+                      )}
+                      {selected.input_types &&
+                        selected.input_types.length > 1 && (
+                          <span className="text-[10px] bg-cyan-500/10 text-cyan-400 px-1.5 py-0.5 rounded">
+                            {selected.input_types.join("+")}
+                          </span>
+                        )}
+                    </div>
+                  );
+                })()}
               </div>
             </div>
 

@@ -8,6 +8,7 @@ export function useModels() {
   const [models, setModels] = useState<ModelEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [reloading, setReloading] = useState(false);
   const [lastRefresh, setLastRefresh] = useState<Date | null>(null);
 
   const refresh = useCallback(async () => {
@@ -21,6 +22,23 @@ export function useModels() {
     } finally {
       setLoading(false);
       setRefreshing(false);
+    }
+  }, []);
+
+  const reload = useCallback(async () => {
+    setReloading(true);
+    try {
+      const data = await api.reloadGatewayModels();
+      if (data.error) {
+        return { success: false, error: data.error };
+      }
+      setModels(data.data || []);
+      setLastRefresh(new Date());
+      return { success: true };
+    } catch (err) {
+      return { success: false, error: err instanceof Error ? err.message : "Unknown error" };
+    } finally {
+      setReloading(false);
     }
   }, []);
 
@@ -51,5 +69,5 @@ export function useModels() {
     [models]
   );
 
-  return { models, byProvider, loading, refreshing, refresh, lastRefresh };
+  return { models, byProvider, loading, refreshing, reloading, refresh, reload, lastRefresh };
 }

@@ -29,7 +29,9 @@ export default function GatewayPage() {
     byProvider,
     loading: modelsLoading,
     refreshing,
+    reloading,
     refresh: refreshModels,
+    reload: reloadModels,
     lastRefresh,
   } = useModels();
   const [history, setHistory] = useState<ConfigHistoryEntry[]>([]);
@@ -41,6 +43,16 @@ export default function GatewayPage() {
       .then((d) => setHistory(d.history))
       .catch(() => {});
   }, []);
+
+  const handleReload = async () => {
+    const result = await reloadModels();
+    if (result.success) {
+      setToast("Models reloaded from providers");
+    } else {
+      setToast(`Error: ${result.error}`);
+    }
+    setTimeout(() => setToast(null), 3000);
+  };
 
   const toggleProvider = async (name: string) => {
     if (!config) return;
@@ -91,7 +103,7 @@ export default function GatewayPage() {
           )}
           <button
             onClick={refreshModels}
-            disabled={refreshing}
+            disabled={refreshing || reloading}
             className="flex items-center gap-2 bg-zinc-800 hover:bg-zinc-700 disabled:opacity-50 text-zinc-300 px-3 py-1.5 rounded-md text-sm font-medium transition-colors"
           >
             <span
@@ -99,7 +111,20 @@ export default function GatewayPage() {
             >
               &#x21bb;
             </span>
-            {refreshing ? "Refreshing..." : "Refresh Models"}
+            {refreshing ? "Refreshing..." : "Refresh"}
+          </button>
+          <button
+            onClick={handleReload}
+            disabled={reloading || refreshing}
+            className="flex items-center gap-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white px-3 py-1.5 rounded-md text-sm font-medium transition-colors"
+            title="Invalidate gateway model cache and re-discover from all providers"
+          >
+            <span
+              className={`inline-block ${reloading ? "animate-spin" : ""}`}
+            >
+              &#x21bb;
+            </span>
+            {reloading ? "Reloading..." : "Reload from Providers"}
           </button>
         </div>
       </div>

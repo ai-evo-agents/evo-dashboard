@@ -18,7 +18,7 @@ Real-time dashboard for the [evo](https://github.com/lifefarmer/evo) multi-agent
 | `/memories/` | **Memories** — memory CRUD, search, stats, and tier inspection |
 | `/events/` | **Events** — live Socket.IO event stream |
 | `/traces/` | **Traces** — distributed trace viewer with span waterfall, span detail panel, and filters (service, status, min duration) |
-| `/debug/` | **Debug** — LLM prompt tester (with model selector) and bash PTY runner; streams responses in real-time |
+| `/debug/` | **Debug** — LLM prompt tester and bash PTY runner; model selector shows live gateway models with context-window and reasoning metadata badges, defaults to codex-auth |
 | `/settings/` | **Settings** — cron jobs and config sync |
 
 ---
@@ -74,7 +74,7 @@ src/
       span-detail.tsx     # Selected span metadata, attributes, and events
   hooks/
     use-agents.ts       # Agent list with real-time Socket.IO updates
-    use-models.ts       # Fetches available models from gateway, groups by provider
+    use-models.ts       # Fetches available models from gateway (incl. WHAM-discovered codex-auth), groups by provider
     use-pipeline.ts     # Pipeline runs
     use-events.ts       # Live event stream
     use-gateway-config.ts # Gateway config read/write

@@ -180,6 +180,11 @@ export const api = {
   gatewayModels: () =>
     fetchJSON<{ object: string; data: ModelEntry[] }>("/gateway/models"),
 
+  reloadGatewayModels: () =>
+    fetchJSON<{ object: string; data: ModelEntry[]; error?: string }>("/gateway/models/refresh", {
+      method: "POST",
+    }),
+
   setAgentModel: (agentId: string, model: string) =>
     fetchJSON<{ success: boolean; error?: string }>(
       `/agents/${agentId}/model`,
