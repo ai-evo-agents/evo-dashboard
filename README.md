@@ -14,7 +14,7 @@ Real-time dashboard for the [evo](https://github.com/lifefarmer/evo) multi-agent
 | `/agents/` | **Agents** — card grid of all registered agents with status, capabilities, skills, and per-agent model selection dropdown |
 | `/pipeline/` | **Pipeline** — evolution pipeline runs and stage details |
 | `/tasks/` | **Tasks** — task list with status filters, detail view, logs, and manual task creation |
-| `/gateway/` | **Gateway** — provider cards (with model badges), enable/disable toggle, config history |
+| `/gateway/` | **Gateway** — live provider cards with model discovery, enable/disable toggle, metadata badges (context window, cost, reasoning), auto-refresh on config change |
 | `/memories/` | **Memories** — memory CRUD, search, stats, and tier inspection |
 | `/events/` | **Events** — live Socket.IO event stream |
 | `/traces/` | **Traces** — distributed trace viewer with span waterfall, span detail panel, and filters (service, status, min duration) |
@@ -108,22 +108,34 @@ Each agent card on the `/agents/` page includes a model dropdown populated dynam
 
 ### Dynamic Model Listing from Gateway
 
-Models are fetched from `GET /gateway/models` rather than being hardcoded. The response follows the OpenAI-compatible list format.
+Models are fetched from `GET /gateway/models` rather than being hardcoded. The response follows the OpenAI-compatible list format with optional rich metadata.
 
-- **Type:** `ModelEntry` — `{ id, object, owned_by, provider, provider_type }`
+- **Type:** `ModelEntry` — `{ id, object, owned_by, provider, provider_type, context_window?, max_tokens?, reasoning?, input_types?, cost? }`
   - `id` uses `provider:model` format (e.g. `openai:gpt-4o`)
   - `provider` and `provider_type` identify the gateway backend
+  - Optional metadata fields are present when `model_metadata` is configured in `gateway.json`
+- **Type:** `ModelCost` — `{ input, output, cache_read?, cache_write? }` (USD per 1M tokens)
 - **API function:** `api.gatewayModels()` returns `{ object, data: ModelEntry[] }`
-- **Hook:** `useModels()` — returns `{ models, byProvider, loading, refresh }`
-  - `byProvider` groups models into a `Record<string, ModelEntry[]>` keyed by provider name, ready for dropdown optgroups
+- **Hook:** `useModels()` — returns `{ models, byProvider, loading, refreshing, refresh, lastRefresh }`
+  - `byProvider` groups models into a `Record<string, ModelEntry[]>` keyed by provider name
+  - `refreshing` distinguishes manual refresh from initial load
+  - `lastRefresh` timestamps the last successful fetch
+  - Subscribes to `king:config_update` Socket.IO event (1s debounce) to auto-refresh when gateway config changes
 
 ### Model Selector on Debug Page
 
 The debug page (`/debug/`) provides a combined text input + dropdown for model selection when testing LLM prompts. The dropdown is populated from `useModels()` with provider grouping. Falls back to a hardcoded preset list if the gateway is unreachable.
 
-### Model Badges on Gateway Provider Cards
+### Gateway Live Provider Display
 
-The gateway page (`/gateway/`) displays model badges on each provider card. The `models` array from `ProviderConfig` is rendered as styled badges showing which models each provider exposes.
+The gateway page (`/gateway/`) shows all configured providers as cards with live data from evo-gateway v0.6.0:
+
+- **Live model discovery** — fetches `GET /gateway/models` and groups results by provider; shows a green **"live"** badge when live data is available, falls back to static config models
+- **Metadata badges** — each live model shows inline sub-badges: context window ("128K ctx"), max output tokens ("16K out"), reasoning indicator (amber), multimodal input types ("text+image", cyan), and cost ("$2.5/$10", per 1M tokens)
+- **Model count** — badge in the card header (e.g. "8 models")
+- **Refresh button** — manual "↻ Refresh Models" with spinner + "Updated HH:MM:SS" freshness indicator
+- **Auto-refresh** — `king:config_update` Socket.IO event triggers both config and model reload
+- **All 8 provider types** displayed with correct labels: OpenAI Compatible, Anthropic, Cursor CLI, Claude Code, Codex CLI, Codex Auth, Google Gemini, GitHub Copilot
 
 ### Debug Console
 
