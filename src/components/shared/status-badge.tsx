@@ -11,6 +11,8 @@ const colors: Record<string, string> = {
   crashed: "bg-red-500/20 text-red-400 border-red-500/30",
   timed_out: "bg-amber-500/20 text-amber-400 border-amber-500/30",
   offline: "bg-zinc-500/20 text-zinc-400 border-zinc-500/30",
+  recovering: "bg-amber-500/10 text-amber-400 border-amber-500/20",
+  decomposed: "bg-purple-500/10 text-purple-400 border-purple-500/20",
 };
 
 export function StatusBadge({ status }: { status: string }) {
@@ -25,6 +27,10 @@ export function StatusBadge({ status }: { status: string }) {
             ? "bg-emerald-400 animate-pulse"
             : status === "running" || status === "in_progress"
             ? "bg-blue-400 animate-pulse"
+            : status === "recovering"
+            ? "bg-amber-400 animate-pulse"
+            : status === "decomposed"
+            ? "bg-purple-400"
             : status === "failed" || status === "crashed"
             ? "bg-red-400"
             : "bg-zinc-400"

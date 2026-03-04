@@ -121,6 +121,8 @@ export default function DebugPage() {
         );
       } else if (data.event === "task:changed") {
         const tc = data.data as TaskChangedEvent;
+        // Guard: deleted events may not carry a task object — skip history update
+        if (tc.action === "deleted") return;
         if (tc.action === "evaluated" && tc.task?.summary) {
           // Match by task_id — update the history entry that has this task_id
           setHistory((prev) =>

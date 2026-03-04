@@ -30,14 +30,35 @@ export function useTasks() {
     const interval = setInterval(refresh, 30000);
 
     const socket = getSocket();
-    const handler = (data: { action: string; task?: Task }) => {
+    const handler = (data: { action: string; task?: Task; task_id?: string; task_ids?: string[] }) => {
+      // Handle deleted action: remove from history, clear current task if needed
+      if (data.action === "deleted") {
+        const deletedIds = data.task_ids
+          ? data.task_ids
+          : data.task_id
+          ? [data.task_id]
+          : [];
+        if (deletedIds.length > 0) {
+          setHistory((prev) => prev.filter((t) => !deletedIds.includes(t.id)));
+          setCurrentTask((prev) =>
+            prev && deletedIds.includes(prev.id) ? null : prev
+          );
+        }
+        return;
+      }
+
       // On any task change, update current task + refresh history
       if (data.task) {
         setCurrentTask((prev) => {
           // If the changed task is the current one, update it
           if (prev && prev.id === data.task!.id) return data.task!;
-          // If the changed task is running, it's the new current
-          if (data.task!.status === "running") return data.task!;
+          // If the changed task is running, recovering, or decomposed, treat as current
+          if (
+            data.task!.status === "running" ||
+            data.task!.status === "recovering" ||
+            data.task!.status === "decomposed"
+          )
+            return data.task!;
           return prev;
         });
       }

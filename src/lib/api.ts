@@ -11,6 +11,7 @@ import type {
   MemoryStats,
   MemoryTier,
   ModelEntry,
+  SubtasksResponse,
   Trace,
   Span,
 } from "./types";
@@ -234,4 +235,19 @@ export const api = {
 
   traceDetail: (traceId: string) =>
     fetchJSON<{ trace: Trace; spans: Span[] }>(`/traces/${traceId}`),
+
+  deleteTask: (taskId: string) =>
+    fetchJSON<{ success: boolean; deleted_count?: number; error?: string }>(
+      `/tasks/${taskId}`,
+      { method: "DELETE" }
+    ),
+
+  taskSubtasks: (taskId: string) =>
+    fetchJSON<SubtasksResponse>(`/task/${taskId}/subtasks`),
+
+  decomposeTask: (taskId: string) =>
+    fetchJSON<{ success: boolean; error?: string }>(
+      `/tasks/${taskId}/decompose`,
+      { method: "POST" }
+    ),
 };

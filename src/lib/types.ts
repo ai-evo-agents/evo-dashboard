@@ -55,6 +55,7 @@ export interface Task {
   run_id: string;
   current_stage: string;
   summary: string;
+  parent_id: string;
   payload: unknown;
   created_at: string;
   updated_at: string;
@@ -229,3 +230,14 @@ export const STATUS_NAMES: Record<number, string> = {
   1: "OK",
   2: "Error",
 };
+
+export interface SubtaskProgress {
+  total: number;
+  completed: number;
+}
+
+export interface SubtasksResponse {
+  subtasks: Task[];
+  count: number;
+  progress: SubtaskProgress;
+}

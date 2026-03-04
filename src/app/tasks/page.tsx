@@ -38,6 +38,23 @@ export default function TasksPage() {
   // When current task changes, auto-select it for log viewing
   const activeTaskId = selectedTaskId || currentTask?.id || null;
 
+  const handleDeleteTask = async (taskId: string) => {
+    if (!confirm("Delete this task and all subtasks?")) return;
+    try {
+      await api.deleteTask(taskId);
+    } catch {
+      // socket update will handle refresh
+    }
+  };
+
+  const handleDecompose = async (taskId: string) => {
+    try {
+      await api.decomposeTask(taskId);
+    } catch {
+      // ignore
+    }
+  };
+
   return (
     <div className="p-6 space-y-6">
       <div className="flex items-center justify-between">
@@ -64,6 +81,8 @@ export default function TasksPage() {
           task={currentTask}
           isSelected={activeTaskId === currentTask.id}
           onSelect={() => setSelectedTaskId(null)}
+          onDelete={handleDeleteTask}
+          onDecompose={handleDecompose}
         />
       ) : (
         <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-8 text-center">
@@ -99,33 +118,46 @@ export default function TasksPage() {
             {history
               .filter((t) => t.id !== currentTask?.id)
               .map((task) => (
-                <button
+                <div
                   key={task.id}
-                  onClick={() =>
-                    setSelectedTaskId(
-                      selectedTaskId === task.id ? null : task.id
-                    )
-                  }
-                  className={`w-full px-4 py-3 flex items-center gap-4 text-sm hover:bg-zinc-800/50 transition-colors text-left ${
+                  className={`w-full px-4 py-3 flex items-center gap-4 text-sm hover:bg-zinc-800/50 transition-colors ${
                     selectedTaskId === task.id ? "bg-zinc-800/30" : ""
                   }`}
                 >
-                  <StatusBadge status={task.status} />
-                  <span className="text-zinc-400 text-xs">
-                    {task.current_stage
-                      ? STAGE_LABELS[task.current_stage] || task.current_stage
-                      : task.task_type}
-                  </span>
-                  <span className="text-zinc-500 text-xs truncate flex-1">
-                    {task.summary || "--"}
-                  </span>
-                  <span className="text-zinc-600 text-xs">
-                    {formatDuration(task.created_at, task.updated_at)}
-                  </span>
-                  <span className="text-zinc-600 text-xs">
-                    {new Date(task.created_at).toLocaleString()}
-                  </span>
-                </button>
+                  <button
+                    onClick={() =>
+                      setSelectedTaskId(
+                        selectedTaskId === task.id ? null : task.id
+                      )
+                    }
+                    className="flex items-center gap-4 flex-1 text-left min-w-0"
+                  >
+                    <StatusBadge status={task.status} />
+                    <span className="text-zinc-400 text-xs shrink-0">
+                      {task.current_stage
+                        ? STAGE_LABELS[task.current_stage] || task.current_stage
+                        : task.task_type}
+                    </span>
+                    <span className="text-zinc-500 text-xs truncate flex-1">
+                      {task.summary || "--"}
+                    </span>
+                    <span className="text-zinc-600 text-xs shrink-0">
+                      {formatDuration(task.created_at, task.updated_at)}
+                    </span>
+                    <span className="text-zinc-600 text-xs shrink-0">
+                      {new Date(task.created_at).toLocaleString()}
+                    </span>
+                  </button>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleDeleteTask(task.id);
+                    }}
+                    className="px-2 py-1 rounded bg-zinc-800 text-red-500/70 hover:text-red-400 text-xs transition-colors shrink-0"
+                  >
+                    Del
+                  </button>
+                </div>
               ))}
             {history.filter((t) => t.id !== currentTask?.id).length === 0 && (
               <div className="px-4 py-6 text-center text-zinc-600 text-xs">
@@ -256,16 +288,19 @@ function CurrentTaskCard({
   task,
   isSelected,
   onSelect,
+  onDelete,
+  onDecompose,
 }: {
   task: Task;
   isSelected: boolean;
   onSelect: () => void;
+  onDelete: (taskId: string) => void;
+  onDecompose: (taskId: string) => void;
 }) {
   const isRunning = task.status === "running";
 
   return (
-    <button
-      onClick={onSelect}
+    <div
       className={`w-full text-left bg-zinc-900 border rounded-lg p-5 space-y-4 transition-colors ${
         isSelected
           ? "border-blue-500/40"
@@ -273,42 +308,129 @@ function CurrentTaskCard({
       }`}
     >
       {/* Header row */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <StatusBadge status={task.status} />
-          {task.run_id && (
-            <span className="text-xs text-zinc-600 font-mono">
-              {task.run_id.slice(0, 8)}
-            </span>
-          )}
+      <button onClick={onSelect} className="w-full text-left">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <StatusBadge status={task.status} />
+            {task.run_id && (
+              <span className="text-xs text-zinc-600 font-mono">
+                {task.run_id.slice(0, 8)}
+              </span>
+            )}
+          </div>
+          <span className="text-xs text-zinc-500">
+            {new Date(task.created_at).toLocaleString()}
+          </span>
         </div>
-        <span className="text-xs text-zinc-500">
-          {new Date(task.created_at).toLocaleString()}
-        </span>
-      </div>
 
-      {/* Summary */}
-      {task.summary && (
-        <div
-          className={`text-sm font-medium ${
-            isRunning ? "text-blue-300" : "text-zinc-300"
-          }`}
+        {/* Summary */}
+        {task.summary && (
+          <div
+            className={`text-sm font-medium mt-3 ${
+              isRunning ? "text-blue-300" : "text-zinc-300"
+            }`}
+          >
+            {task.summary}
+            {isRunning && (
+              <span className="inline-block ml-1 animate-pulse">...</span>
+            )}
+          </div>
+        )}
+
+        {/* Pipeline Stage Progress Bar */}
+        {task.task_type === "pipeline" && (
+          <div className="mt-3">
+            <TaskStageBar
+              currentStage={task.current_stage}
+              status={task.status}
+            />
+          </div>
+        )}
+      </button>
+
+      {/* Recovery status indicator */}
+      {task.status === "recovering" && (
+        <div className="flex items-center gap-2 text-xs text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded px-3 py-2 mt-2">
+          <span className="animate-pulse">&#9889;</span>
+          <span>Error recovery in progress — evaluation agent is analyzing the failure...</span>
+        </div>
+      )}
+
+      {/* Subtask list */}
+      <SubtaskList taskId={task.id} />
+
+      {/* Action buttons */}
+      <div className="flex gap-2 mt-2">
+        <button
+          onClick={() => onDecompose(task.id)}
+          className="px-3 py-1 rounded bg-purple-500/10 text-purple-400 text-xs hover:bg-purple-500/20 transition-colors"
+          disabled={task.status === "recovering"}
         >
-          {task.summary}
-          {isRunning && (
-            <span className="inline-block ml-1 animate-pulse">...</span>
-          )}
+          Decompose
+        </button>
+        <button
+          onClick={() => onDelete(task.id)}
+          className="px-3 py-1 rounded bg-red-500/10 text-red-500/70 hover:text-red-400 text-xs transition-colors"
+        >
+          {task.status === "running" || task.status === "recovering" ? "Abort + Del" : "Del"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ─── Subtask List ────────────────────────────────────────────────────────────
+
+function SubtaskList({ taskId }: { taskId: string }) {
+  const [subtasks, setSubtasks] = useState<Task[]>([]);
+  const [progress, setProgress] = useState({ total: 0, completed: 0 });
+  const [loading, setLoading] = useState(true);
+  const [expanded, setExpanded] = useState(false);
+
+  useEffect(() => {
+    api.taskSubtasks(taskId).then((res) => {
+      setSubtasks(res.subtasks || []);
+      setProgress(res.progress || { total: 0, completed: 0 });
+      setLoading(false);
+    }).catch(() => setLoading(false));
+  }, [taskId]);
+
+  if (loading || progress.total === 0) return null;
+
+  return (
+    <div className="mt-3">
+      <button
+        onClick={() => setExpanded(!expanded)}
+        className="flex items-center gap-2 text-xs text-zinc-400 hover:text-zinc-200"
+      >
+        <span>{expanded ? "\u25BC" : "\u25B6"}</span>
+        <span>Subtasks ({progress.completed}/{progress.total})</span>
+        <div className="flex-1 h-1.5 bg-zinc-800 rounded overflow-hidden max-w-32">
+          <div
+            className="h-full bg-emerald-500/60 rounded transition-all"
+            style={{ width: `${progress.total > 0 ? (progress.completed / progress.total) * 100 : 0}%` }}
+          />
+        </div>
+      </button>
+      {expanded && (
+        <div className="mt-2 ml-4 border-l border-zinc-700 pl-3 space-y-1">
+          {subtasks.map((sub) => (
+            <div key={sub.id} className="flex items-center gap-2 text-xs py-1">
+              <span className={`inline-block w-2 h-2 rounded-full ${
+                sub.status === "completed" ? "bg-emerald-500" :
+                sub.status === "running" ? "bg-blue-500 animate-pulse" :
+                sub.status === "failed" ? "bg-red-500" :
+                sub.status === "recovering" ? "bg-amber-500 animate-pulse" :
+                sub.status === "decomposed" ? "bg-purple-500" :
+                "bg-zinc-500"
+              }`} />
+              <span className="text-zinc-400 truncate flex-1">{sub.summary || sub.task_type}</span>
+              <span className="text-zinc-600 shrink-0">{new Date(sub.created_at).toLocaleTimeString()}</span>
+            </div>
+          ))}
         </div>
       )}
-
-      {/* Pipeline Stage Progress Bar */}
-      {task.task_type === "pipeline" && (
-        <TaskStageBar
-          currentStage={task.current_stage}
-          status={task.status}
-        />
-      )}
-    </button>
+    </div>
   );
 }
 

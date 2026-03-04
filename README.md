@@ -2,7 +2,7 @@
 
 Real-time dashboard for the [evo](https://github.com/lifefarmer/evo) multi-agent system. Built with Next.js 16, React 19, Tailwind CSS 4, and Zustand. Connects to `evo-king` (port 3000) via REST and Socket.IO for live updates.
 
-**Version:** 0.2.1
+**Version:** 0.3.0
 
 ---
 
@@ -13,7 +13,7 @@ Real-time dashboard for the [evo](https://github.com/lifefarmer/evo) multi-agent
 | `/` | **Overview** — king health, online agent count, active pipelines, recent events |
 | `/agents/` | **Agents** — card grid of all registered agents with status, capabilities, skills, per-agent model selection dropdown, and reasoning effort selector (shown when the selected model supports reasoning) |
 | `/pipeline/` | **Pipeline** — evolution pipeline runs and stage details |
-| `/tasks/` | **Tasks** — task list with status filters, detail view, logs, and manual task creation |
+| `/tasks/` | **Tasks** — task list with status filters, detail view, logs, manual task creation, delete (with cascade + pipeline abort), decompose into subtasks, subtask progress, and error recovery status |
 | `/gateway/` | **Gateway** — live provider cards with model discovery, enable/disable toggle, metadata badges (context window, cost, reasoning), auto-refresh on config change |
 | `/memories/` | **Memories** — memory CRUD, search, stats, and tier inspection |
 | `/events/` | **Events** — live Socket.IO event stream |
@@ -180,6 +180,9 @@ All evo-king endpoints are wrapped in `src/lib/api.ts` as typed async functions:
 | `memoryStats()` | GET | `/memories/stats` | Memory statistics |
 | `memoryTiers(memoryId)` | GET | `/memories/:id/tiers` | Memory tier contents |
 | `taskMemories(taskId)` | GET | `/task/:id/memories` | Memories linked to a task |
+| `deleteTask(taskId)` | DELETE | `/tasks/:id` | Delete a task (cascade: subtasks, logs, memories) |
+| `taskSubtasks(taskId)` | GET | `/task/:id/subtasks` | Fetch subtasks for a task |
+| `decomposeTask(taskId)` | POST | `/tasks/:id/decompose` | Request task decomposition |
 | `debugPrompt(params)` | POST | `/debug/prompt` | Send an LLM prompt via gateway |
 | `debugBash(params)` | POST | `/debug/bash` | Run a bash command via PTY |
 | `traces(params?)` | GET | `/traces` | List traces (filterable by service, status, min duration) |
