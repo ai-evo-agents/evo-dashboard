@@ -11,14 +11,14 @@ Real-time dashboard for the [evo](https://github.com/lifefarmer/evo) multi-agent
 | Route | Description |
 |-------|-------------|
 | `/` | **Overview** — king health, online agent count, active pipelines, recent events |
-| `/agents/` | **Agents** — card grid of all registered agents with status, capabilities, skills, and per-agent model selection dropdown |
+| `/agents/` | **Agents** — card grid of all registered agents with status, capabilities, skills, per-agent model selection dropdown, and reasoning effort selector (shown when the selected model supports reasoning) |
 | `/pipeline/` | **Pipeline** — evolution pipeline runs and stage details |
 | `/tasks/` | **Tasks** — task list with status filters, detail view, logs, and manual task creation |
 | `/gateway/` | **Gateway** — live provider cards with model discovery, enable/disable toggle, metadata badges (context window, cost, reasoning), auto-refresh on config change |
 | `/memories/` | **Memories** — memory CRUD, search, stats, and tier inspection |
 | `/events/` | **Events** — live Socket.IO event stream |
 | `/traces/` | **Traces** — distributed trace viewer with span waterfall, span detail panel, and filters (service, status, min duration) |
-| `/debug/` | **Debug** — three-mode console: **LLM** (route via king agent pipeline), **Bash PTY** (shell commands), **Gateway** (direct `POST /v1/chat/completions` with SSE streaming, per-model reasoning effort selector, optional system prompt) |
+| `/debug/` | **Debug** — three-mode console: **LLM** (route via king agent pipeline with agent role selector, model selector, and per-model reasoning effort selector), **Bash PTY** (shell commands), **Gateway** (direct `POST /v1/chat/completions` with SSE streaming, per-model reasoning effort selector, optional system prompt) |
 | `/settings/` | **Settings** — cron jobs and config sync |
 
 ---
@@ -98,13 +98,14 @@ src/
 
 Agents are tracked via Zustand with optimistic updates. The `useAgents` hook fetches the full list on mount, polls every 30 seconds as a fallback, and receives per-agent `agent:register` and `agent:status` heartbeats over Socket.IO. Agents that miss a heartbeat for 60 seconds are shown as offline.
 
-### Per-Agent Model Selection
+### Per-Agent Model Selection and Reasoning Effort
 
-Each agent card on the `/agents/` page includes a model dropdown populated dynamically from the gateway. Selecting a model calls `PUT /agents/:id/model` and applies an optimistic update to the Zustand store.
+Each agent card on the `/agents/` page includes a model dropdown populated dynamically from the gateway. Selecting a model calls `PUT /agents/:id/model` and applies an optimistic update to the Zustand store. When the selected model supports reasoning (i.e. `ModelEntry.reasoning === true`), a reasoning effort button group appears below the dropdown (`low / medium / high / xhigh` or the model's `reasoning_levels`).
 
-- **Agent type** (`Agent`) includes a `preferred_model` field
-- **API function:** `api.setAgentModel(agentId, model)` sends a `PUT` to `/agents/:id/model`
+- **Agent type** (`Agent`) includes `preferred_model` and `reasoning_effort` fields
+- **API function:** `api.setAgentModel(agentId, model, reasoningEffort?)` sends a `PUT` to `/agents/:id/model` with `{"model": "...", "reasoning_effort": "..."}`
 - Models are grouped by provider in `<optgroup>` elements for easier selection
+- Switching to a non-reasoning model auto-clears the reasoning effort; switching to a reasoning model preserves the previous effort (or defaults to `"high"`)
 
 ### Dynamic Model Listing from Gateway
 
@@ -141,7 +142,7 @@ The gateway page (`/gateway/`) shows all configured providers as cards with live
 ### Debug Console
 
 Three modes:
-- **LLM** — send prompts to any agent role through the king pipeline, with agent role and model selectors. Responses stream in real-time via `debug:stream` Socket.IO events. Task evaluations appear as inline badges.
+- **LLM** — send prompts to any agent role through the king pipeline, with agent role, model, and per-model reasoning effort selectors. Responses stream in real-time via `debug:stream` Socket.IO events. Task evaluations appear as inline badges. The agent role dropdown filters out agents with empty roles (e.g. `agent-update`) and falls back to a hardcoded kernel-role list.
 - **Bash PTY** — run shell commands with full terminal output streamed via Socket.IO.
 - **Gateway** — POST directly to `http://localhost:8080/v1/chat/completions` with SSE streaming, bypassing the king agent pipeline entirely. Includes a per-model reasoning effort selector (levels from WHAM-discovered `reasoning_levels`, e.g. `low / medium / high / xhigh`) and an optional system prompt textarea. Useful for raw gateway testing and reasoning effort tuning without a soul.md.
 
@@ -155,7 +156,7 @@ All evo-king endpoints are wrapped in `src/lib/api.ts` as typed async functions:
 |----------|--------|----------|-------------|
 | `health()` | GET | `/health` | King health check |
 | `agents()` | GET | `/agents` | List all agents |
-| `setAgentModel(id, model)` | PUT | `/agents/:id/model` | Set an agent's preferred model |
+| `setAgentModel(id, model, reasoningEffort?)` | PUT | `/agents/:id/model` | Set an agent's preferred model and optional reasoning effort |
 | `pipelineStart(trigger?)` | POST | `/pipeline/start` | Trigger a pipeline run |
 | `pipelineRuns()` | GET | `/pipeline/runs` | List pipeline runs |
 | `pipelineDetail(runId)` | GET | `/pipeline/runs/:id` | Stage history for a run |

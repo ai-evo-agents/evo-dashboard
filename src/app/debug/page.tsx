@@ -68,8 +68,8 @@ export default function DebugPage() {
   const [history, setHistory] = useState<HistoryEntry[]>([]);
   const responseRef = useRef<HTMLDivElement>(null);
 
-  // Deduplicate roles from agents
-  const roles = [...new Set(agents.map((a) => a.role))].sort();
+  // Deduplicate roles from agents (filter out empty strings so fallback list is used)
+  const roles = [...new Set(agents.map((a) => a.role).filter(Boolean))].sort();
 
   // Selected model metadata
   const selectedModel = models.find((m) => m.id === model);
@@ -151,7 +151,12 @@ export default function DebugPage() {
     if (!prompt.trim() || sending) return;
     setSending(true);
     try {
-      const res = await api.debugPrompt({ agent_role: role, model, prompt });
+      const res = await api.debugPrompt({
+        agent_role: role,
+        model,
+        prompt,
+        ...(selectedModel?.reasoning && { reasoning_effort: reasoningEffort }),
+      });
       if (res.success && res.request_id) {
         setHistory((prev) => [
           {
@@ -185,7 +190,7 @@ export default function DebugPage() {
     } finally {
       setSending(false);
     }
-  }, [prompt, sending, role, model]);
+  }, [prompt, sending, role, model, selectedModel, reasoningEffort]);
 
   const sendBash = useCallback(async () => {
     if (!bashCommand.trim() || sending) return;
@@ -523,6 +528,32 @@ export default function DebugPage() {
               {/* Model */}
               {modelPicker}
             </div>
+
+            {/* Reasoning effort selector — shown only for models with reasoning support */}
+            {selectedModel?.reasoning && (
+              <div>
+                <label className="block text-xs text-zinc-500 mb-1">
+                  Reasoning Effort
+                </label>
+                <div className="flex gap-1">
+                  {(
+                    selectedModel.reasoning_levels ?? DEFAULT_REASONING_LEVELS
+                  ).map((level) => (
+                    <button
+                      key={level}
+                      onClick={() => setReasoningEffort(level)}
+                      className={`px-3 py-1 text-xs font-mono rounded transition-colors ${
+                        reasoningEffort === level
+                          ? "bg-emerald-600 text-white"
+                          : "bg-zinc-800 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-700"
+                      }`}
+                    >
+                      {level}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {/* Prompt */}
             <div>

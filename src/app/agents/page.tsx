@@ -7,6 +7,8 @@ import { getEffectiveStatus, isAgentLive, useAgentStore } from "@/store/agent-st
 import { api } from "@/lib/api";
 import type { Agent, ModelEntry } from "@/lib/types";
 
+const DEFAULT_REASONING_LEVELS = ["low", "medium", "high", "xhigh"];
+
 export default function AgentsPage() {
   const { agents, loading } = useAgents();
   const { models, byProvider, loading: modelsLoading } = useModels();
@@ -22,11 +24,11 @@ export default function AgentsPage() {
 
   const onlineCount = agents.filter(isAgentLive).length;
 
-  const handleModelChange = async (agentId: string, model: string) => {
+  const handleModelChange = async (agentId: string, model: string, reasoningEffort?: string) => {
     // Optimistic update
-    upsertAgent({ agent_id: agentId, preferred_model: model });
+    upsertAgent({ agent_id: agentId, preferred_model: model, reasoning_effort: reasoningEffort ?? "" });
     try {
-      await api.setAgentModel(agentId, model);
+      await api.setAgentModel(agentId, model, reasoningEffort);
     } catch {
       // Revert on error — refetch will correct it
     }
@@ -49,6 +51,7 @@ export default function AgentsPage() {
             <AgentCard
               key={agent.agent_id}
               agent={agent}
+              models={models}
               byProvider={byProvider}
               modelsLoading={modelsLoading}
               onModelChange={handleModelChange}
@@ -64,14 +67,16 @@ export default function AgentsPage() {
 
 function AgentCard({
   agent,
+  models,
   byProvider,
   modelsLoading,
   onModelChange,
 }: {
   agent: Agent;
+  models: ModelEntry[];
   byProvider: Record<string, ModelEntry[]>;
   modelsLoading: boolean;
-  onModelChange: (agentId: string, model: string) => void;
+  onModelChange: (agentId: string, model: string, reasoningEffort?: string) => void;
 }) {
   const effectiveStatus = getEffectiveStatus(agent);
   const isOnline = isAgentLive(agent);
@@ -79,10 +84,22 @@ function AgentCard({
     effectiveStatus === "failed" || effectiveStatus === "crashed";
   const [saving, setSaving] = useState(false);
 
+  // Look up selected model metadata for reasoning support
+  const selectedModel = models.find((m) => m.id === agent.preferred_model);
+
   const handleChange = async (e: React.ChangeEvent<HTMLSelectElement>) => {
     setSaving(true);
-    onModelChange(agent.agent_id, e.target.value);
-    // Brief visual feedback
+    // When model changes, keep reasoning_effort if new model supports it, otherwise clear
+    const newModel = e.target.value;
+    const newModelMeta = models.find((m) => m.id === newModel);
+    const effort = newModelMeta?.reasoning ? (agent.reasoning_effort || "high") : "";
+    onModelChange(agent.agent_id, newModel, effort);
+    setTimeout(() => setSaving(false), 600);
+  };
+
+  const handleReasoningChange = (level: string) => {
+    setSaving(true);
+    onModelChange(agent.agent_id, agent.preferred_model, level);
     setTimeout(() => setSaving(false), 600);
   };
 
@@ -181,6 +198,30 @@ function AgentCard({
             </optgroup>
           ))}
         </select>
+
+        {/* Reasoning effort selector — shown when selected model supports reasoning */}
+        {selectedModel?.reasoning && (
+          <div className="mt-2">
+            <span className="text-xs text-zinc-500">Reasoning Effort</span>
+            <div className="flex flex-wrap gap-1 mt-1">
+              {(selectedModel.reasoning_levels ?? DEFAULT_REASONING_LEVELS).map(
+                (level) => (
+                  <button
+                    key={level}
+                    onClick={() => handleReasoningChange(level)}
+                    className={`px-2 py-0.5 text-xs font-mono rounded transition-colors ${
+                      (agent.reasoning_effort || "high") === level
+                        ? "bg-emerald-600 text-white"
+                        : "bg-zinc-800 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-700"
+                    }`}
+                  >
+                    {level}
+                  </button>
+                )
+              )}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

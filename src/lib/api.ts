@@ -185,10 +185,10 @@ export const api = {
       method: "POST",
     }),
 
-  setAgentModel: (agentId: string, model: string) =>
+  setAgentModel: (agentId: string, model: string, reasoningEffort?: string) =>
     fetchJSON<{ success: boolean; error?: string }>(
       `/agents/${agentId}/model`,
-      { method: "PUT", body: JSON.stringify({ model }) }
+      { method: "PUT", body: JSON.stringify({ model, reasoning_effort: reasoningEffort ?? "" }) }
     ),
 
   debugPrompt: (params: {
@@ -198,6 +198,7 @@ export const api = {
     provider?: string;
     temperature?: number;
     max_tokens?: number;
+    reasoning_effort?: string;
   }) =>
     fetchJSON<{ success: boolean; request_id?: string; task_id?: string; error?: string }>(
       "/debug/prompt",

@@ -7,6 +7,7 @@ export interface Agent {
   skills: string[];
   pid: number;
   preferred_model: string;
+  reasoning_effort: string;
 }
 
 export interface ModelCost {
